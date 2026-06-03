@@ -1,0 +1,19 @@
+# Test fixture — Missing Allowed Uses (approved, enabled=True).
+id: missing_allowed_uses
+name: Missing Allowed Uses
+category: news_rss
+access_method: rss
+base_url: https://example.com
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: []
+rate_limit: { max_requests: 1, window_seconds: 5 }
+freshness: { target: "24h", warn_after: "36h", error_after: "72h" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }
+fetch:
+  connector: atlascore.connectors.rss.feed:RssConnector
+  schedule: "*/30 * * * *"
+  timeout_seconds: 30

@@ -33,8 +33,10 @@ deep-dive instead.
 | [0010](0010-naming-atlascore.md) | Name the project AtlasCore (distribution `atlascore`, CLI `atlas`) and retire AtlasWire | Accepted | 2026-06-03 | — |
 | [0011](0011-mcp-read-only-seven-tool-surface.md) | Expose a read-only seven-tool MCP surface over stdio with injection safety and side-effect confirmation instead of RBAC | Accepted | 2026-06-03 | — |
 | [0012](0012-packaging-layout-src-atlascore.md) | Adopt a single `src/atlascore` import root; preserve `packages`/`apps` as the subpackage grouping | Accepted | 2026-06-03 | — (B1 packaging) |
+| [0013](0013-source-registry-on-disk-and-slug-round-trip.md) | Source registry in `sources/`; YAML slug round-trips in `config`; B2 adds `source sync`/`list` | Accepted | 2026-06-03 | — (B2 registry) |
 
 > ADRs 0001–0011 encode the canonical-spec resolutions R1–R8 plus the naming and
 > MCP-surface decisions: R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008,
 > R6 in 0004, R7 in 0005, and R8 in 0007. **0012** records the B1 packaging-layout
-> finalization (the `src/atlascore` import root) the spec deferred to block B1.
+> finalization (the `src/atlascore` import root); **0013** records the B2 source-registry
+> location + slug round-trip + CLI surface.

@@ -194,6 +194,7 @@ atlascore/
       scheduler/                 (APScheduler entrypoint; EXACTLY ONE instance)            [app]
       api/                       (OPTIONAL thin read-only FastAPI; only if a dashboard is wanted) [app]
       py.typed                   (PEP 561 marker)
+  sources/                       (git-tracked SOURCE REGISTRY = source of truth; <slug>.yaml; no secrets; ADR 0013)
   infra/
     docker-compose.yml
     backup.sh
@@ -251,8 +252,10 @@ make typecheck      # mypy / pyright
 make test           # unit + contract + integration (NO live network in unit)
 make smoke          # local end-to-end smoke
 
-atlas source validate path/to/source.yaml   # validate a source YAML against the schema
-atlas source test <source_id>               # dry-run a source (policy + reachability)
+atlas source validate path/to/source.yaml   # validate a source YAML (schema + duration grammar + default-deny); --all scans sources/
+atlas source sync path/to/source.yaml        # validate + register (upsert) into the source table; --all syncs sources/ (ADR 0013)
+atlas source test <source_id>               # dry-run a source (policy gate; live reachability lands with the connector in B4)
+atlas source list                            # list registered sources (slug, policy, fetchability, name)
 atlas crawl once <source_id>                # enqueue/run one crawl job
 atlas parse <raw_id>                         # (re)parse a raw document
 atlas enrich <doc_id>                        # run enrichment for a document

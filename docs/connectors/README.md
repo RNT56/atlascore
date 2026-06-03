@@ -62,11 +62,12 @@ packages/
     secrets/             # credential resolution + sanitize_for_storage helper
 ```
 
-> **Packaging note (spec §1):** the exact import/distribution layout (`src` vs flat,
-> how `apps/` and `packages/` map into the `atlascore` distribution, and the module
-> path behind the `atlas` console script) is finalized in MVP block **B1**, not
-> here. The dotted paths in YAML (`atlascore.connectors.sec.companyfacts:...`) state
-> intent; the canonical module root is fixed in B1.
+> **Packaging note (finalized in B1 — [ADR 0012](../decisions/0012-packaging-layout-src-atlascore.md)):**
+> the import root is a single **`src/atlascore`**. Read every `packages/<x>/…` path in this
+> doc as `src/atlascore/<x>/…` (e.g. the `packages/connectors/rss` shown above is
+> `src/atlascore/connectors/rss`); the dotted import stays `atlascore.connectors.rss…`,
+> exactly the YAML `fetch.connector` convention. The git-tracked registry lives in
+> `sources/` ([ADR 0013](../decisions/0013-source-registry-on-disk-and-slug-round-trip.md)).
 
 ---
 
@@ -282,7 +283,8 @@ The YAML must round-trip losslessly into the `source` table (spec 2.1 + correcti
 
 | YAML field | Storage |
 |---|---|
-| `id`, `name`, `category`, `access_method`, `base_url`, `enabled` | dedicated columns |
+| `name`, `category`, `access_method`, `base_url`, `enabled` | dedicated columns |
+| `id` (slug) | `source.config.slug` — the table PK `id` is a generated **UUIDv7**; the YAML slug is the *logical* key (used for the filename + dedupe_keys), round-tripped in `config` ([ADR 0013](../decisions/0013-source-registry-on-disk-and-slug-round-trip.md)). Upserts are idempotent on the unique `name`. |
 | `policy.status` | `source.policy_status` |
 | `rate_limit`, `freshness`, `retention` | dedicated jsonb columns |
 | `credentials.ref` | `source.credential_ref` |

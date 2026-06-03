@@ -9,8 +9,6 @@ target database is left unchanged.
 from __future__ import annotations
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import Engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,6 +17,8 @@ from atlascore.schemas.source import AccessMethod
 from atlascore.storage.postgres.models import Source
 
 pytestmark = pytest.mark.integration
+
+# `migrated_engine` (apply migrations to head) is provided by tests/integration/conftest.py.
 
 EXPECTED_COLUMNS = {
     "id",
@@ -38,15 +38,6 @@ EXPECTED_COLUMNS = {
     "created_at",
     "updated_at",
 }
-
-
-@pytest.fixture(scope="session")
-def migrated_engine(db_engine: Engine, database_url: str) -> Engine:
-    """Apply Alembic migrations to head (idempotent) against the live DB."""
-    cfg = Config("alembic.ini")
-    cfg.set_main_option("sqlalchemy.url", database_url)
-    command.upgrade(cfg, "head")
-    return db_engine
 
 
 def test_required_extensions_present(migrated_engine: Engine) -> None:

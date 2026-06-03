@@ -1,0 +1,27 @@
+# AtlasCore source registry — Federal Reserve Board press releases (RSS).
+#
+# Policy note (operator): U.S. federal government works are public domain
+# (17 U.S.C. §105) and this RSS feed is published for syndication, so it is
+# marked `approved` for internal research. Re-confirm the feed's terms if you
+# ever publish derived results (the GDPR household exemption lapses then — see
+# docs/compliance). No secrets and no private endpoints live here.
+
+id: fed_press_releases
+name: Federal Reserve Board — Press Releases
+category: central_bank
+access_method: rss
+base_url: https://www.federalreserve.gov
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+rate_limit: { max_requests: 1, window_seconds: 5 }
+freshness: { target: "24h", warn_after: "36h", error_after: "72h" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }
+fetch:
+  # The generic RSS connector lands in B4; this ref is validated for format only in B2.
+  connector: atlascore.connectors.rss.feed:RssConnector
+  schedule: "*/30 * * * *"
+  timeout_seconds: 30

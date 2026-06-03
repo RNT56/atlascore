@@ -12,6 +12,8 @@ import os
 from collections.abc import Iterator
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import OperationalError
 
@@ -40,3 +42,12 @@ def db_engine(database_url: str) -> Iterator[Engine]:
         pytest.skip(f"no reachable database at {database_url}: {exc.__class__.__name__}")
     yield engine
     engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def migrated_engine(db_engine: Engine, database_url: str) -> Engine:
+    """Apply Alembic migrations to head (idempotent) against the live DB."""
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", database_url)
+    command.upgrade(cfg, "head")
+    return db_engine

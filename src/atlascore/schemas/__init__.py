@@ -13,7 +13,11 @@ from atlascore.schemas.source import (
     RateLimit,
     Retention,
     SourceConfig,
+    SourceCredentials,
+    SourceFetch,
+    SourcePolicy,
     SourceRecord,
+    SourceYAML,
 )
 
 __all__ = [
@@ -23,7 +27,11 @@ __all__ = [
     "RateLimit",
     "Retention",
     "SourceConfig",
+    "SourceCredentials",
+    "SourceFetch",
+    "SourcePolicy",
     "SourceRecord",
+    "SourceYAML",
 ]
 
 # Bump when any persisted record's shape changes; written onto rows as schema_version.

@@ -13,3 +13,7 @@ class ConfigError(AtlasError):
 
 class PolicyError(AtlasError):
     """A default-deny policy violation: an attempt to act on a non-fetchable source."""
+
+
+class SourceValidationError(ConfigError):
+    """A source-registry YAML failed validation (schema, grammar, or policy)."""

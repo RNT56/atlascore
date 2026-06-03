@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _dist_version
+from typing import Annotated
 
 import typer
+
+from atlascore.cli.source import source_app
 
 app = typer.Typer(
     name="atlas",
@@ -17,6 +20,7 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+app.add_typer(source_app, name="source")
 
 
 def _version() -> str:
@@ -36,9 +40,9 @@ def _print_version() -> None:
 @app.callback(invoke_without_command=True)
 def main(
     *,
-    version: bool = typer.Option(
-        False, "--version", "-V", help="Show the AtlasCore version and exit."
-    ),
+    version: Annotated[
+        bool, typer.Option("--version", "-V", help="Show the AtlasCore version and exit.")
+    ] = False,
 ) -> None:
     """AtlasCore control plane."""
     if version:

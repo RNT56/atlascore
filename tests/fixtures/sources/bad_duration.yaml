@@ -1,0 +1,19 @@
+# Test fixture — Bad Duration (approved, enabled=True).
+id: bad_duration
+name: Bad Duration
+category: news_rss
+access_method: rss
+base_url: https://example.com
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search]
+rate_limit: { max_requests: 1, window_seconds: 5 }
+freshness: { target: "24h", warn_after: "36h", error_after: "72h" }
+retention: { raw: "2x", normalized: "permanent" }
+credentials: { ref: null }
+fetch:
+  connector: atlascore.connectors.rss.feed:RssConnector
+  schedule: "*/30 * * * *"
+  timeout_seconds: 30

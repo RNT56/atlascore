@@ -10,9 +10,9 @@ first tagged release, all work accumulates under **[Unreleased]**.
 
 ## [Unreleased] - 2026-06-03
 
-This entry covers the planning + documentation scaffold and the **B1 skeleton** — the first
-application code: the `atlascore` package (`src/` layout), the Alembic harness, and the `source`
-schema. The MVP continues at backlog block **B2**.
+This entry covers the planning + documentation scaffold, the **B1 skeleton** (the `atlascore`
+package, the Alembic harness, and the `source` schema), and the **B2 source registry** (canonical
+YAML, default-deny, and the `atlas source` CLI). The MVP continues at backlog block **B3**.
 
 ### Added
 
@@ -84,5 +84,26 @@ schema. The MVP continues at backlog block **B2**.
 - **CI `integration` job** failed on every push to `main` with pytest exit code 5 (no tests
   collected) because `tests/integration/` was empty; it now collects real DB tests (which skip
   cleanly when no database is present).
+
+### Added — B2 (source registry)
+
+- **Canonical source-YAML loader + validation** — `atlascore.schemas.source.SourceYAML` (nested
+  `policy`/`credentials`/`fetch`) with `to_record()` mirroring the YAML losslessly into a `source`
+  row (R9: the logical slug round-trips in `config.slug`; `credentials.ref` → `credential_ref`,
+  an env-key name, never a value). `atlascore.core.durations` parses the retention/freshness
+  duration grammar (`Nh|Nd|Nw|Nm|Ny|permanent`; retention allows `permanent`, freshness does not).
+- **Default-deny policy gate** — `allowed_uses` is required for `approved`/`restricted`; validation
+  refuses `enabled: true` on a non-fetchable policy; `is_fetchable = enabled AND policy.is_fetchable`.
+  `unknown`/`pending`/`prohibited` are refused at validate time and at the fetchability gate.
+- **`atlas source` CLI** — `validate` (pure, no DB; backs the CI `source-yaml` job), `sync`
+  (validate + idempotent upsert into the `source` table, keyed on `name`), `test` (a no-network
+  policy dry-run; live reachability lands with the connector in B4), and `list`.
+- **`sources/` registry** — the git-tracked source of truth, with `sources/README.md` and an
+  approved public-domain RSS source (`fed_press_releases`). `tests/fixtures/sources/` covers the
+  approved, refusal (`pending`/`unknown`/`prohibited` + enabled), and malformed cases.
+- **ADR [0013](docs/decisions/0013-source-registry-on-disk-and-slug-round-trip.md)** — registry
+  location, the slug↔UUID reconciliation, and the `sync`/`list` CLI additions. CLAUDE.md §7
+  (`sources/`) and §9 (`source sync`/`list`) and docs/connectors §4.6 updated. `make seed` now
+  validates + registers the registry.
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

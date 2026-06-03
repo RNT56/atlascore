@@ -50,9 +50,10 @@ down: ## Stop the local stack (keeps volumes).
 migrate: ## Apply Alembic migrations (postgres only).
 	$(RUN) alembic upgrade head
 
-seed: ## Seed fixtures / demo sources (register an approved RSS source).
-	$(RUN) atlas source validate tests/fixtures/sources/example_rss.yaml
-	@echo "Seed step: register fixtures via 'atlas source ...' (wired up in B2)."
+seed: ## Validate + register the source registry (needs `make dev && make migrate`).
+	$(RUN) atlas source validate --all
+	$(RUN) atlas source sync --all
+	$(RUN) atlas source list
 
 format: ## ruff format (the only formatter).
 	$(RUN) ruff format .

@@ -1,0 +1,19 @@
+# Test fixture — Bad Cron (approved, enabled=True).
+id: bad_cron
+name: Bad Cron
+category: news_rss
+access_method: rss
+base_url: https://example.com
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search]
+rate_limit: { max_requests: 1, window_seconds: 5 }
+freshness: { target: "24h", warn_after: "36h", error_after: "72h" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }
+fetch:
+  connector: atlascore.connectors.rss.feed:RssConnector
+  schedule: "every minute please"
+  timeout_seconds: 30

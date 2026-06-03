@@ -8,13 +8,16 @@
 
 ## Current phase
 
-**Block B1 — DONE (2026-06-03). Next: B2.**
+**Block B2 — DONE (2026-06-03). Next: B3.**
 
-The B1 skeleton is in place and verified: the `src/atlascore` package, the Alembic harness, and
-migration `0001` (the `vector`/`pg_trgm` extensions + the `source` table). **Done-when met:**
-`make test` is green (26 unit pass; 4 integration skip offline) and migrations run — applied to a
-real Postgres 16 + pgvector with an empty autogenerate drift-check, idempotent re-upgrade, and a
-clean downgrade→upgrade round-trip.
+The source registry is in place and verified end-to-end: the canonical YAML loader
+(`SourceYAML` → `SourceRecord`, R9 round-trip), duration-grammar validation, the default-deny
+policy gate, the `sources/` git-tracked registry, and the `atlas source validate`/`sync`/`test`/
+`list` CLI. **Done-when met:** `atlas source sync --all` registered the approved Fed RSS source
+(`fetchable`), and `unknown`/`pending`/`prohibited` are refused — at validate time (a pending+enabled
+YAML exits non-zero) and at the fetchability gate (`atlas source test` REFUSES a disabled/pending
+source). `make test` green offline (66 unit pass; 8 integration skip); 8 integration tests pass
+against a real Postgres 16. **B1** (skeleton + packaging + Alembic + `source` schema) is also DONE.
 
 The MVP is a single ordered backlog of 15 blocks (**B1–B15**). See
 [`PROJECT-PLAN.md`](PROJECT-PLAN.md) §MVP for the authoritative list. Discipline: freeze scope
@@ -48,33 +51,46 @@ until the current set runs unattended for a month before adding sources or servi
   - 26 unit + 4 integration tests; audited `.secrets.baseline`; ruff/mypy/pytest all green.
   - Adversarial multi-agent review run; confirmed findings fixed (CI integration-job exit-5 redness;
     detect-secrets CI flag bug; constraint-naming locked by a unit test; doc/nit clarifications).
+- **B2 — source registry + default-deny + canonical YAML + `atlas source` CLI (2026-06-03).**
+  - `atlascore.core.durations` (retention/freshness grammar) + `SourceYAML` model (nested
+    policy/credentials/fetch) with validators (durations, connector ref, 5-field cron, base_url
+    scheme, slug) and `to_record()` (R9 round-trip; YAML slug → `config.slug`, [ADR 0013](decisions/0013-source-registry-on-disk-and-slug-round-trip.md)).
+  - **Default-deny enforced**: `allowed_uses` required for approved/restricted; refuses
+    `enabled: true` on a non-fetchable policy; `is_fetchable = enabled AND policy.is_fetchable`.
+  - `atlascore.storage.sources` (load/discover/upsert-on-name/get-by-slug/list) + the
+    `atlas source validate` (pure, no DB; CI `source-yaml` target) / `sync` / `test` / `list` CLI.
+  - The `sources/` registry with an approved public-domain RSS source (`fed_press_releases`),
+    `sources/README.md`, and `tests/fixtures/sources/` (approved + refusal + malformed cases).
+  - 40 new tests (durations, source YAML round-trip + default-deny, validate CLI, sync/get/list
+    integration); ruff/mypy/pytest green; done-when demonstrated against a real Postgres 16.
+  - CLAUDE.md §7 (`sources/`) + §9 (`source sync`/`list`) and docs/connectors §4.6 updated.
 
 ---
 
 ## In progress
 
-*(none)* — B1 closed. B2 not yet claimed.
+*(none)* — B2 closed. B3 not yet claimed.
 
 ---
 
 ## Next
 
-**B2 — Source registry + default-deny policy + canonical source YAML (retention + freshness) +
-CLI `atlas source validate` / `atlas source test`.**
+**B3 — Raw store (immutable, content-addressed, gzip) + `crawl_job` queue
+(`SELECT … FOR UPDATE SKIP LOCKED` + DLQ).**
 
 Concrete next steps:
 
-1. YAML loader: parse the canonical source YAML (docs/connectors §4) into `SourceRecord`, mapping
-   `policy.*`/`fetch.*` into the `config` jsonb (round-trip per R9) and `credentials.ref` →
-   `credential_ref` (env-key name, never a value).
-2. Duration-grammar validation for `retention` (`Nd|Nw|Nm|Ny|permanent`) and `freshness`
-   (`Nh|…`), and the policy enum / default-deny gate (refuse `unknown`/`pending`/`prohibited`).
-3. `atlas source validate <path>` and `atlas source validate --all` (the CI `source-yaml` job
-   target), plus `atlas source test <id>` (policy + reachability dry-run, no live network by default).
-4. Source↔table round-trip persistence + a register/sync path; per-connector fixtures begin in B4.
+1. Schema + migration `0002`: the `crawl_job` table (status machine `pending|claimed|running|done|
+   failed|dead`, `dedupe_key` unique, attempt/max_attempts, sanitized `last_error`/`payload`,
+   indexes) and the `raw_document` table (content-addressed, `content_hash` unique, FK to source +
+   crawl_job, `ON DELETE RESTRICT`).
+2. Raw store: immutable, gzipped, content-addressed payloads on local disk (`RAW_STORE_DIR`),
+   write-once with a content hash; deletable only via the audited purge path (R3, later).
+3. Job queue: claim via `SELECT … FOR UPDATE SKIP LOCKED`; retry/backoff; `> max_attempts ⇒ dead`
+   (DLQ, CLI-inspectable); stale-claim reclaim. `sanitize_for_storage` (packages/security/secrets)
+   for `last_error`/`payload` arrives with its first writer.
 
-**Definition of done for B2:** register an approved RSS source; `unknown`/`pending`/`prohibited`
-refused.
+**Definition of done for B3:** jobs claim/run/retry/dead; raw on disk.
 
 Then onward through B15. Build-order dependencies to remember: **B7** ships `search_documents` +
 the `audit_log` table + result caps; **B8** adds `source_health` + the freshness job +
