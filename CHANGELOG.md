@@ -10,8 +10,9 @@ first tagged release, all work accumulates under **[Unreleased]**.
 
 ## [Unreleased] - 2026-06-03
 
-This entry establishes the planning, documentation, and project scaffolding. No
-application code ships yet; the MVP begins at backlog block **B1**.
+This entry covers the planning + documentation scaffold and the **B1 skeleton** — the first
+application code: the `atlascore` package (`src/` layout), the Alembic harness, and the `source`
+schema. The MVP continues at backlog block **B2**.
 
 ### Added
 
@@ -49,5 +50,39 @@ application code ships yet; the MVP begins at backlog block **B1**.
   the structure physically exists; plus the root project files `README.md`, `CHANGELOG.md`,
   `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE` (proprietary placeholder), `.gitignore`,
   and `.env.example`. The final Python import/distribution layout is finalized in B1.
+- **B1 skeleton — application code begins.**
+  - **`src/atlascore` package** (the import root): `core` (typed `Settings` with `SecretStr`
+    secrets, sortable **UUIDv7** ids, UTC `Clock`, `structlog` logging, error hierarchy),
+    `schemas` (`SourceRecord` + `AccessMethod`/`PolicyStatus` enums + default-deny
+    `is_fetchable`), `storage.postgres` (`Base` with a stable naming convention + the `Source`
+    ORM table), and the `atlas` Typer CLI (`atlas version` / `--version`). Empty placeholder
+    subpackages preserve the future tree.
+  - **Alembic harness** (`alembic.ini`, `migrations/env.py`, `migrations/script.py.mako`) and
+    **migration `0001`**: creates the required `vector` (pgvector) and `pg_trgm` extensions, then
+    the `source` table with its indexes, unique, and CHECK constraints. The DB URL is resolved
+    from the environment (no secrets in the repo).
+  - **Tests:** 26 unit (UUIDv7, settings + secret hygiene, source schema, source table shape, CLI)
+    and 4 integration (migration applies, extensions present, server defaults + UUIDv7 PK, CHECK
+    constraint enforcement) that **skip when no database is reachable** so `make test` is green offline.
+  - **Locked dependencies** (`uv.lock`) and an audited **`.secrets.baseline`** (detect-secrets).
+
+### Changed
+
+- **Packaging layout finalized (ADR 0012):** a single **`src/atlascore`** import root replaces the
+  empty top-level `apps/` and `packages/` placeholders; the `packages` (libraries) vs `apps`
+  (runnable roles) distinction is preserved as subpackage names. `pyproject.toml` hatchling/ruff/
+  mypy/coverage retargeted to `src`; `uv run mypy` checks the `atlascore` package; pre-commit mypy
+  scans `^src/`. CLAUDE.md §7 (canonical tree + packaging note) and the ADR index updated to match.
+- **`alembic.ini`:** added `path_separator = os` (modern config; silences Alembic's legacy-splitting
+  deprecation that `filterwarnings=error` would otherwise turn into a test error).
+
+### Fixed
+
+- **CI `secrets-scan`** used a non-existent `detect-secrets --fail-on-unaudited` flag (not in
+  detect-secrets 1.5.0); replaced with a baseline re-scan + an explicit gate that fails on any
+  unaudited or real finding.
+- **CI `integration` job** failed on every push to `main` with pytest exit code 5 (no tests
+  collected) because `tests/integration/` was empty; it now collects real DB tests (which skip
+  cleanly when no database is present).
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

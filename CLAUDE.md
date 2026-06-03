@@ -170,26 +170,30 @@ atlascore/
   .env.example
   .pre-commit-config.yaml
   pyproject.toml                 (uv-managed; distribution name atlascore; CLI entry point atlas)
+  uv.lock                        (frozen dependency lockfile; committed; CI uses uv sync --frozen)
+  alembic.ini                    (Alembic config; DB URL resolved from env in migrations/env.py)
+  .secrets.baseline              (detect-secrets audited baseline)
   Makefile
   .github/
     workflows/ci.yml
     dependabot.yml
-  apps/
-    mcp_server/                  (FastMCP over stdio; read tools)
-    cli/                         (Typer CLI; the only ingestion-management surface; entry point atlas)
-    worker/                      (fetch/parse/enrich loop)
-    scheduler/                   (APScheduler entrypoint; EXACTLY ONE instance)
-    api/                         (OPTIONAL thin read-only FastAPI; only if a dashboard is wanted)
-  packages/
-    core/                        (config, logging, IDs UUIDv7/ULID, errors, clock)
-    schemas/                     (Pydantic v2 models; source of truth for migrations)
-    connectors_sdk/              (connector interface + test harness)
-    connectors/                  (rss/ fred/ sec/ nvd/ github/ arxiv/)
-    parsers/                     (article/ filing/ macro/)
-    enrichment/                  (language/ ner/ topics/ embeddings/ summaries/)
-    storage/                     (postgres/ rawstore/ search/)
-    security/                    (url_safety/ sanitization/ secrets/ policies/)
-    alerts/                      (rules/ delivery/)
+  src/
+    atlascore/                   (THE single import root = the atlascore distribution; ADR 0012)
+      core/                      (config, logging, IDs UUIDv7/ULID, errors, clock)        [lib]
+      schemas/                   (Pydantic v2 models; canonical shape for migrations)     [lib]
+      connectors_sdk/            (connector interface + test harness)                      [lib]
+      connectors/                (rss/ fred/ sec/ nvd/ github/ arxiv/)                     [lib]
+      parsers/                   (article/ filing/ macro/)                                 [lib]
+      enrichment/                (language/ ner/ topics/ embeddings/ summaries/)           [lib]
+      storage/                   (postgres/ rawstore/ search/)                             [lib]
+      security/                  (url_safety/ sanitization/ secrets/ policies/)            [lib]
+      alerts/                    (rules/ delivery/)                                        [lib]
+      cli/                       (Typer CLI; the only ingestion-mgmt surface; atlas=atlascore.cli.main:app) [app]
+      mcp_server/                (FastMCP over stdio; read tools)                          [app]
+      worker/                    (fetch/parse/enrich loop)                                 [app]
+      scheduler/                 (APScheduler entrypoint; EXACTLY ONE instance)            [app]
+      api/                       (OPTIONAL thin read-only FastAPI; only if a dashboard is wanted) [app]
+      py.typed                   (PEP 561 marker)
   infra/
     docker-compose.yml
     backup.sh
@@ -209,7 +213,7 @@ atlascore/
     decisions/                   (ADRs: 0000-template.md, 0001..0011, README.md index)
 ```
 
-**Packaging note:** the tree above exists now as folders (with `.gitkeep`) so the structure physically exists. The Python import/distribution layout (src vs flat; how `apps/` and `packages/` map into the `atlascore` distribution; the exact module path behind the `atlas` console script) is **FINALIZED in MVP block B1, not before**. Scaffolding files declare intent + tree, not the final import graph.
+**Packaging note (FINALIZED in B1 — ADR 0012):** the import/distribution layout is a single **`src/atlascore/`** root, so on-disk path == import path (no remap; `ruff`/`mypy`/`pytest`/coverage/runtime all agree). The console script is `atlas = atlascore.cli.main:app`. The spec's `packages/` (libraries) vs `apps/` (runnable roles) split is preserved as the subpackage **names** directly under `atlascore` (marked `[lib]`/`[app]` above). **Mapping rule:** wherever this file or the docs say `packages/<x>/…` read `src/atlascore/<x>/…`, and `apps/<y>/…` read `src/atlascore/<y>/…`; the dotted import is `atlascore.<x>`/`atlascore.<y>` in both cases (exactly the connector-ref and console-script convention, e.g. `atlascore.connectors.sec.companyfacts`, `atlascore.security.secrets`). The deep-dive `docs/**/README.md` path prefixes are reconciled to `src/atlascore/…` per-block as each subsystem's code lands.
 
 ---
 

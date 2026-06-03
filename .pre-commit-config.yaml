@@ -31,7 +31,7 @@ repos:
         # Light pass at commit time: type the source packages/apps, skip the
         # heavy strict gate (CI runs the full strict mypy).
         args: ["--ignore-missing-imports", "--no-strict-optional"]
-        files: ^(apps|packages)/
+        files: ^src/
         additional_dependencies:
           - pydantic>=2.7
           - types-pyyaml>=6.0

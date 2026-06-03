@@ -97,35 +97,40 @@ make test        # unit + contract + integration (no live network in unit)
 make smoke       # local end-to-end smoke
 ```
 
-> If a command doesn't exist yet, it lands in its backlog block (see below) — the structure and intent are declared, the import/packaging layout is finalized in **B1**.
+> If a command doesn't exist yet, it lands in its backlog block (see below). The import/packaging
+> layout was finalized in **B1** (ADR 0012): a single `src/atlascore` import root.
 
 ---
 
 ## Repository layout (summary)
 
+The import/packaging layout is a single `src/atlascore` root (ADR 0012). The spec's `packages`
+(libraries) vs `apps` (runnable roles) split is preserved as the subpackage names — marked `[lib]`/
+`[app]` below — so a doc reference like `packages/security/secrets` means `atlascore.security.secrets`.
+
 ```text
 atlascore/
   README.md  CLAUDE.md  CHANGELOG.md  CONTRIBUTING.md  SECURITY.md  LICENSE
-  .gitignore  .env.example  .pre-commit-config.yaml  pyproject.toml  Makefile
+  .gitignore  .env.example  .pre-commit-config.yaml  pyproject.toml  uv.lock
+  alembic.ini  .secrets.baseline  Makefile
   .github/        workflows/ci.yml, dependabot.yml
-  apps/
-    mcp_server/   # FastMCP over stdio; read tools
-    cli/          # Typer CLI; the only ingestion-management surface; entry point `atlas`
-    worker/       # fetch/parse/enrich loop
-    scheduler/    # APScheduler entrypoint; EXACTLY ONE instance
-    api/          # OPTIONAL thin read-only FastAPI (only if a dashboard is wanted)
-  packages/
-    core/         # config, logging, IDs (UUIDv7/ULID), errors, clock
-    schemas/      # Pydantic v2 models — source of truth for migrations
-    connectors_sdk/   # connector interface + test harness
-    connectors/   # rss/ fred/ sec/ nvd/ github/ arxiv/
-    parsers/      # article/ filing/ macro/
-    enrichment/   # language/ ner/ topics/ embeddings/ summaries/
-    storage/      # postgres/ rawstore/ search/
-    security/     # url_safety/ sanitization/ secrets/ policies/
-    alerts/       # rules/ delivery/
+  src/atlascore/  # the single import root = the atlascore distribution
+    core/         # [lib] config, logging, IDs (UUIDv7/ULID), errors, clock
+    schemas/      # [lib] Pydantic v2 models — canonical shape for migrations
+    connectors_sdk/   # [lib] connector interface + test harness
+    connectors/   # [lib] rss/ fred/ sec/ nvd/ github/ arxiv/
+    parsers/      # [lib] article/ filing/ macro/
+    enrichment/   # [lib] language/ ner/ topics/ embeddings/ summaries/
+    storage/      # [lib] postgres/ rawstore/ search/
+    security/     # [lib] url_safety/ sanitization/ secrets/ policies/
+    alerts/       # [lib] rules/ delivery/
+    cli/          # [app] Typer CLI; the only ingestion-management surface; entry point `atlas`
+    mcp_server/   # [app] FastMCP over stdio; read tools
+    worker/       # [app] fetch/parse/enrich loop
+    scheduler/    # [app] APScheduler entrypoint; EXACTLY ONE instance
+    api/          # [app] OPTIONAL thin read-only FastAPI (only if a dashboard is wanted)
   infra/          # docker-compose.yml, backup.sh
-  migrations/     # alembic (postgres only)
+  migrations/     # alembic (postgres only): env.py + versions/
   tests/          # unit/ integration/ fixtures/
   docs/           # PROJECT-PLAN, STATUS, architecture, connectors, schemas,
                   # security, compliance, mcp, runbooks, decisions/ (ADRs)

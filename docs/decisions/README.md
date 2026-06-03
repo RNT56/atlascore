@@ -32,8 +32,9 @@ deep-dive instead.
 | [0009](0009-purge-erasure-vs-immutable-raw.md) | Carve out one audited purge path as the single exception to raw immutability, with a full referential cascade | Accepted | 2026-06-03 | R3 |
 | [0010](0010-naming-atlascore.md) | Name the project AtlasCore (distribution `atlascore`, CLI `atlas`) and retire AtlasWire | Accepted | 2026-06-03 | — |
 | [0011](0011-mcp-read-only-seven-tool-surface.md) | Expose a read-only seven-tool MCP surface over stdio with injection safety and side-effect confirmation instead of RBAC | Accepted | 2026-06-03 | — |
+| [0012](0012-packaging-layout-src-atlascore.md) | Adopt a single `src/atlascore` import root; preserve `packages`/`apps` as the subpackage grouping | Accepted | 2026-06-03 | — (B1 packaging) |
 
-> All eleven ADRs (0001–0011) are written and `Accepted`. Together they encode the
-> canonical-spec resolutions R1–R8 plus the naming and MCP-surface decisions:
-> R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008, R6 in 0004, R7 in 0005,
-> and R8 in 0007.
+> ADRs 0001–0011 encode the canonical-spec resolutions R1–R8 plus the naming and
+> MCP-surface decisions: R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008,
+> R6 in 0004, R7 in 0005, and R8 in 0007. **0012** records the B1 packaging-layout
+> finalization (the `src/atlascore` import root) the spec deferred to block B1.

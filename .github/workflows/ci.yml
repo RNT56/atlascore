@@ -66,7 +66,8 @@ jobs:
       - name: Install project (locked)
         run: uv sync --frozen --all-extras
       - name: mypy
-        run: uv run mypy .
+        # Config (pyproject [tool.mypy]) targets the atlascore package via mypy_path=src.
+        run: uv run mypy
 
   test:
     name: pytest (unit + contract, no network)
@@ -188,8 +189,24 @@ jobs:
         # In-database sinks (crawl_job.last_error/payload, audit_log.detail) are protected separately
         # by packages/security/secrets:sanitize_for_storage + the B15 secrets-in-logs regression test.
         run: |
+          # Re-scan reuses the exclude filters stored in the baseline and preserves prior
+          # audit labels; new/unaudited findings or any real secret then fail the gate.
           uvx detect-secrets scan --baseline .secrets.baseline
-          uvx detect-secrets audit --report --fail-on-unaudited .secrets.baseline
+          uvx detect-secrets audit --report .secrets.baseline
+          python3 - <<'PY'
+          import json, sys
+          baseline = json.load(open(".secrets.baseline"))
+          bad = [
+              (f, item.get("line_number"), item.get("is_secret"))
+              for f, items in baseline["results"].items()
+              for item in items
+              if item.get("is_secret") in (None, True)
+          ]
+          if bad:
+              print("::error::Unaudited or real secrets in baseline:", bad)
+              sys.exit(1)
+          print("secrets baseline clean: all findings audited as false positives")
+          PY
 
   # ---------------------------------------------------------------------------
   # OPTIONAL integration job: DB / raw-store / search / queue paths against a real
