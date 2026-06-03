@@ -12,6 +12,7 @@ from typing import Annotated
 
 import typer
 
+from atlascore.cli.crawl import crawl_app
 from atlascore.cli.source import source_app
 
 app = typer.Typer(
@@ -21,6 +22,7 @@ app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(source_app, name="source")
+app.add_typer(crawl_app, name="crawl")
 
 
 def _version() -> str:

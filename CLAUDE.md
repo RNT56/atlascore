@@ -256,7 +256,9 @@ atlas source validate path/to/source.yaml   # validate a source YAML (schema + d
 atlas source sync path/to/source.yaml        # validate + register (upsert) into the source table; --all syncs sources/ (ADR 0013)
 atlas source test <source_id>               # dry-run a source (policy gate; live reachability lands with the connector in B4)
 atlas source list                            # list registered sources (slug, policy, fetchability, name)
-atlas crawl once <source_id>                # enqueue/run one crawl job
+atlas crawl enqueue <source_id>             # enqueue a fetch crawl_job for a fetchable source (B3)
+atlas crawl dlq                              # inspect the dead-letter queue (B3)
+atlas crawl once <source_id>                # enqueue + RUN one crawl job (needs the worker/connector — B4)
 atlas parse <raw_id>                         # (re)parse a raw document
 atlas enrich <doc_id>                        # run enrichment for a document
 atlas alerts run                             # evaluate alert rules

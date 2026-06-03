@@ -11,8 +11,9 @@ first tagged release, all work accumulates under **[Unreleased]**.
 ## [Unreleased] - 2026-06-03
 
 This entry covers the planning + documentation scaffold, the **B1 skeleton** (the `atlascore`
-package, the Alembic harness, and the `source` schema), and the **B2 source registry** (canonical
-YAML, default-deny, and the `atlas source` CLI). The MVP continues at backlog block **B3**.
+package, the Alembic harness, and the `source` schema), the **B2 source registry** (canonical YAML,
+default-deny, and the `atlas source` CLI), and the **B3 raw store + job queue** (content-addressed
+raw storage, the `crawl_job` queue, and `sanitize_for_storage`). The MVP continues at block **B4**.
 
 ### Added
 
@@ -105,5 +106,24 @@ YAML, default-deny, and the `atlas source` CLI). The MVP continues at backlog bl
   location, the slug↔UUID reconciliation, and the `sync`/`list` CLI additions. CLAUDE.md §7
   (`sources/`) and §9 (`source sync`/`list`) and docs/connectors §4.6 updated. `make seed` now
   validates + registers the registry.
+
+### Added — B3 (raw store + job queue)
+
+- **Immutable raw store** — `atlascore.storage.rawstore.RawStore`: gzipped, content-addressed
+  blobs on local disk (`<algo>/<shard>/<rest>.gz`), atomic writes, idempotent dedupe on the content
+  hash. `atlascore.core.hashing.content_hash` (`"<algo>:<hexdigest>"`).
+- **Postgres job queue** (migration `0002`, `crawl_job`) — `atlascore.storage.queue`: `enqueue`
+  (idempotent on `dedupe_key`), `claim_next` (`SELECT … FOR UPDATE SKIP LOCKED`), `complete`,
+  `fail` (retry → `pending` with exponential backoff, then → `dead` over `max_attempts`),
+  `reclaim_stale` (visibility-timeout crash safety), and `dead_jobs` (the DLQ). `now` is injected
+  for deterministic retry timing.
+- **`raw_document` table** (migration `0002`) — content-addressed index row (`content_hash`
+  unique), FK to `source`/`crawl_job` with `ON DELETE RESTRICT`.
+- **`sanitize_for_storage`** — `atlascore.security.secrets`: the single write-time redactor for
+  `crawl_job.last_error`/`payload` (and later `audit_log.detail`). Strips URL query/userinfo,
+  redacts `Authorization`/`Cookie` headers, bearer tokens, and secret-keyed values recursively
+  (CLAUDE.md §14). Routed through `enqueue`/`fail`.
+- **`atlas crawl` CLI** — `enqueue` (enqueue a fetch job for a fetchable source; default-deny
+  enforced) and `dlq` (inspect dead jobs). Shared `cli/_db.py` session helper.
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

@@ -251,6 +251,12 @@ The repo-only gitleaks/detect-secrets scan never sees runtime data. Three free-f
 
 It is **forbidden** to store a resolved credential value or a credential-bearing URL in any `jsonb`/`text` column. Backups inherit this guarantee because the data never lands unsanitized.
 
+> **Implemented in B3** at `atlascore.security.secrets.sanitize_for_storage` (recall the packaging
+> mapping `packages/security/secrets` → `src/atlascore/security/secrets`, ADR 0012). It is routed
+> through the queue's `enqueue` (`payload`) and `fail` (`last_error`) writers, and is quote-aware so
+> credential values inside JSON bodies and dict/`httpx.Headers` reprs (`{"api_key":"…"}`,
+> `{'apiKey': '…'}`) are redacted, not just bare `key=value`. Covered by `tests/unit/test_sanitize.py`.
+
 The B15 secrets-in-logs regression test is extended to cover `crawl_job.last_error` and `audit_log.detail`, asserting that a known secret routed through these paths never appears in the persisted row.
 
 ---

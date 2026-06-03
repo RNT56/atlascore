@@ -9,19 +9,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from pydantic import ValidationError
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
 
+from atlascore.cli._db import session_or_exit
 from atlascore.core.errors import SourceValidationError
 from atlascore.schemas.source import PolicyStatus
-from atlascore.storage.postgres.base import make_engine
 from atlascore.storage.sources import (
     DEFAULT_REGISTRY_DIR,
     discover_source_files,
@@ -38,24 +34,6 @@ source_app = typer.Typer(
 )
 
 _LoadError = (SourceValidationError, ValidationError)
-
-
-@contextmanager
-def _session() -> Iterator[Session]:
-    """Yield a DB session, exiting cleanly with a message if the database is unreachable."""
-    engine = make_engine()
-    try:
-        with Session(engine) as session:
-            yield session
-    except OperationalError as exc:
-        typer.secho(
-            f"database unreachable ({exc.__class__.__name__}); run `make dev && make migrate` first",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(code=1) from exc
-    finally:
-        engine.dispose()
 
 
 def _select_files(path: Path | None, all_: bool) -> list[Path]:
@@ -118,7 +96,7 @@ def sync(
         except _LoadError as exc:
             typer.secho(f"FAIL  {file}\n      {exc}", fg=typer.colors.RED, err=True)
             raise typer.Exit(code=1) from exc
-    with _session() as session, session.begin():
+    with session_or_exit() as session, session.begin():
         for record in records:
             upsert_source(session, record)
             typer.secho(f"registered  {record.name}", fg=typer.colors.GREEN)
@@ -130,7 +108,7 @@ def test(
     source_id: Annotated[str, typer.Argument(help="The source id (slug) or name.")],
 ) -> None:
     """Dry-run a registered source: the default-deny policy gate. No live network (B2)."""
-    with _session() as session:
+    with session_or_exit() as session:
         row = get_source(session, source_id)
         if row is None:
             typer.secho(
@@ -158,7 +136,7 @@ def test(
 @source_app.command("list")
 def list_registered() -> None:
     """List registered sources (slug, policy, fetchability, name)."""
-    with _session() as session:
+    with session_or_exit() as session:
         rows = list_sources(session)
         if not rows:
             typer.echo("no sources registered")
