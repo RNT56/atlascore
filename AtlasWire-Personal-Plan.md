@@ -1,0 +1,3 @@
+# AtlasWire → AtlasCore (moved)
+
+**This project was renamed from AtlasWire to AtlasCore.** This file is now only a redirect note: the old AtlasWire plan — including its earlier conflicting "Build first (in order)" and "First 10 tasks" backlogs — has been superseded and removed. The canonical, fully-reconciled project plan now lives at [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md), whose single ordered MVP backlog (B1–B15) replaces all prior lists. For the agent operating contract see `CLAUDE.md`, for living build state see `docs/STATUS.md`, and for schema detail see `docs/schemas/README.md`. (Date: 2026-06-03. This "Formerly AtlasWire" note is the only remaining AtlasWire reference.)

@@ -1,0 +1,64 @@
+# .pre-commit-config.yaml — AtlasCore
+#
+# Local hooks mirror the CI quality gates (.github/workflows/ci.yml) so failures
+# are caught before commit. Install once with `pre-commit install` (or `make setup`).
+# Run on the whole tree with `make precommit` (== `pre-commit run --all-files`).
+#
+# Gates: ruff format + lint, light mypy, detect-secrets, check-yaml, check-json,
+# end-of-file-fixer, trailing-whitespace.
+
+minimum_pre_commit_version: "3.7.0"
+default_language_version:
+  python: python3.12
+
+repos:
+  # --- ruff: format + lint (the single formatter/linter) ------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        name: ruff lint (autofix)
+        args: ["--fix"]
+      - id: ruff-format
+        name: ruff format
+
+  # --- mypy: light static typing (full strict run lives in CI) ------------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.1
+    hooks:
+      - id: mypy
+        name: mypy (light)
+        # Light pass at commit time: type the source packages/apps, skip the
+        # heavy strict gate (CI runs the full strict mypy).
+        args: ["--ignore-missing-imports", "--no-strict-optional"]
+        files: ^(apps|packages)/
+        additional_dependencies:
+          - pydantic>=2.7
+          - types-pyyaml>=6.0
+
+  # --- detect-secrets: block secrets/tokens from entering the repo --------
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        # The encrypted secrets file and the example env are expected; exclude
+        # them and the lockfile from the scan.
+        exclude: ^(secrets\.sops\.yaml|\.env\.example|uv\.lock)$
+
+  # --- pre-commit-hooks: hygiene ------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md"]
+      - id: check-yaml
+        # Source registry YAML + compose + workflows must parse.
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]

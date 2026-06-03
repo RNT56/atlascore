@@ -1,0 +1,51 @@
+# AtlasCore — Dependabot (date: 2026-06-03)
+#
+# Open-source-grade hygiene from day one (SPEC §0 repo posture, §11 CI/hygiene):
+# keep Python deps and GitHub Actions pinned and patched. Weekly cadence keeps noise low
+# for a single operator while still catching security and version drift.
+#
+# Pairs with the CI pip-audit job; Dependabot proposes upgrades, CI gates them.
+
+version: 2
+updates:
+  # Python dependencies (uv-managed; pyproject.toml + uv.lock).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      # Batch routine minor/patch bumps into a single PR to reduce review churn.
+      python-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by .github/workflows/ci.yml.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-all:
+        patterns:
+          - "*"

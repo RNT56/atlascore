@@ -1,0 +1,50 @@
+AtlasCore — Proprietary / All Rights Reserved (placeholder)
+
+Copyright (c) 2026 AtlasCore (single operator). All rights reserved.
+
+================================================================================
+STATUS: This LICENSE is a temporary proprietary / all-rights-reserved
+placeholder while the AtlasCore repository is PRIVATE. It is NOT an open-source
+license.
+
+The project's FOSS boundary is CODE, NOT DATA. The intent is to publish the
+CODE at a later date under a permissive open-source license — either the
+Apache License 2.0 or the MIT License (to be chosen at publish time). At that
+point this file MUST be replaced with the full text of the chosen license and
+this placeholder removed. Harvested data and private credentials are NEVER
+published under any license.
+================================================================================
+
+TERMS (while private)
+
+1. Ownership. This software, including its source code, configuration,
+   documentation, and all associated materials (the "Software"), is the
+   exclusive property of the copyright holder.
+
+2. No grant of rights. No license, express or implied, is granted to any third
+   party to use, copy, modify, merge, publish, distribute, sublicense, or sell
+   copies of the Software, in whole or in part, except by separate written
+   permission from the copyright holder.
+
+3. Confidentiality. The Software is confidential. It must not be disclosed,
+   shared, or made publicly available except as expressly authorized by the
+   copyright holder.
+
+4. No data redistribution. Independently of any future code license, data
+   collected, derived, cached, or stored by the Software (including raw
+   payloads, normalized records, embeddings, summaries, and indexes) is
+   internal-only and must NEVER be redistributed.
+
+5. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+6. Limitation of liability. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE
+   FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+   CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH
+   THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+TO DO AT PUBLISH: replace this entire file with the full text of Apache-2.0 or
+MIT, retain the copyright line, and remove the "while private" terms above.
+--------------------------------------------------------------------------------

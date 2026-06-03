@@ -1,0 +1,83 @@
+# AtlasCore — local single-box stack (date: 2026-06-03)
+#
+# A governed, single-operator data fabric for your own agents and dashboards.
+#
+# This Compose file runs ONLY the stateful infrastructure on one box:
+#   - postgres (PostgreSQL 16 + pgvector + pg_trgm) — relational, FTS, vector, time-series.
+#   - meilisearch (OPTIONAL, behind a profile) — only adopted if Postgres FTS is outgrown.
+#
+# The AtlasCore application roles are deliberately NOT Compose services here:
+#   - scheduler   (apps/scheduler)  — APScheduler/cron; EXACTLY ONE instance (double-fires otherwise).
+#   - worker      (apps/worker)     — fetch/parse/enrich loop; fetch role is single-instance in MVP (SPEC R5/§5).
+#   - mcp_server  (apps/mcp_server) — FastMCP over stdio (an agent attaches to its stdio; not a server port).
+#
+# In MVP these run as plain Python processes (`atlas ...` / `uv run ...`) or as systemd units on the
+# host, NOT as Compose services. This keeps the single-scheduler and single-fetch-worker invariants
+# (SPEC §5, R5) enforceable with one systemd unit / pg advisory lock each, and keeps the stdio MCP
+# transport clean. Containerizing the app roles is a documented later step, not part of the initial box.
+#
+# Secrets: never inline. POSTGRES_* are read from the environment / a gitignored .env (see .env.example).
+# DATABASE_URL used by the app:
+#   postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}
+
+name: atlascore
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: atlascore-postgres
+    restart: unless-stopped
+    # PostgreSQL 16 baseline (SPEC §2): chosen for its support window. NULLS NOT DISTINCT
+    # (used by time_series_point, SPEC R1) actually requires PG15+; pg16 comfortably satisfies it.
+    # Required extensions are created by an early Alembic migration:
+    #   CREATE EXTENSION IF NOT EXISTS vector;     -- pgvector (embeddings)
+    #   CREATE EXTENSION IF NOT EXISTS pg_trgm;    -- trigram (entity.canonical_name gin_trgm_ops)
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-atlascore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:-atlascore}
+      # Deterministic, locale-stable initdb for reproducible collation/sort behaviour.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      # Bound to loopback only: the box is single-operator and the app connects locally.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - atlascore_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-atlascore} -d ${POSTGRES_DB:-atlascore}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Modest, single-box-friendly resource ceilings; tune per host.
+    shm_size: "256mb"
+
+  # ---------------------------------------------------------------------------
+  # OPTIONAL: Meilisearch (single binary). Adopt ONLY if Postgres FTS is outgrown
+  # (SPEC stack rule). Disabled by default; enable with:  docker compose --profile search up -d
+  # ---------------------------------------------------------------------------
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: atlascore-meilisearch
+    restart: unless-stopped
+    profiles: ["search"]   # OPTIONAL — not started unless the "search" profile is selected.
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?MEILI_MASTER_KEY must be set when using the search profile}
+      MEILI_ENV: ${MEILI_ENV:-production}
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "127.0.0.1:7700:7700"
+    volumes:
+      - atlascore_meilidata:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  atlascore_pgdata:
+    name: atlascore_pgdata
+  atlascore_meilidata:
+    name: atlascore_meilidata

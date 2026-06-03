@@ -1,0 +1,260 @@
+# pyproject.toml — AtlasCore
+#
+# Project / repository / Python distribution name: atlascore
+# Product / brand name: AtlasCore (formerly "AtlasWire" — fully renamed)
+# CLI command (console_scripts entry point): atlas
+#
+# Dependency management: uv. Lock with `uv lock`; sync with `uv sync` (and
+# `uv sync --extra dev` for the dev toolchain, or `uv sync --all-extras`).
+# Deps are pinned by lower bound here and FROZEN exactly in uv.lock (committed).
+#
+# PACKAGING NOTE (per canonical spec, finalized in MVP block B1):
+# The exact Python import/distribution layout (src vs flat; how apps/ and
+# packages/ map into the atlascore distribution) and the exact module path
+# behind the `atlas` console script are FINALIZED in B1. The [project.scripts]
+# target below (`atlascore.cli.main:app`) declares INTENT; revise it in B1
+# once the import graph is settled. See docs/PROJECT-PLAN.md §MVP (B1).
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "atlascore"
+version = "0.0.0"
+description = "A governed, single-operator data fabric for your own agents and dashboards."
+readme = "README.md"
+requires-python = ">=3.12"
+# LICENSE is a proprietary/all-rights-reserved placeholder while the repo is
+# private; switch to Apache-2.0 or MIT at publish (see LICENSE).
+license = { file = "LICENSE" }
+authors = [{ name = "AtlasCore (single operator)" }]
+keywords = [
+    "rss",
+    "ingestion",
+    "data-fabric",
+    "mcp",
+    "provenance",
+    "single-operator",
+    "internal-only",
+]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Intended Audience :: Developers",
+    "Topic :: Internet",
+    "Topic :: Database",
+]
+
+# Core runtime dependencies (single-box build; lean by design).
+# No external broker, no search cluster, no vector DB, no OLAP — Postgres does it all.
+dependencies = [
+    "pydantic>=2.7",          # v2 models; source of truth for migrations (boundary validation)
+    "pydantic-settings>=2.2", # typed settings from environment / .env
+    "sqlalchemy>=2.0",        # 2.x ORM/Core for canonical stores + control plane
+    "alembic>=1.13",          # migrations for every schema change (postgres only)
+    "psycopg[binary]>=3.1",   # PostgreSQL 16 driver (DATABASE_URL uses postgresql+psycopg)
+    "pgvector>=0.3",          # vector(N) column + ANN index support (single active dim per deploy)
+    "httpx>=0.27",            # async/sync HTTP fetcher (timeouts, retries, conditional requests)
+    "feedparser>=6.0",        # RSS/Atom parsing (ETag / Last-Modified aware)
+    "trafilatura>=1.9",       # primary article extraction (fallback parsers added per connector)
+    "typer>=0.12",            # the `atlas` CLI — the only ingestion-management surface
+    "mcp>=1.2",               # official MCP Python SDK / FastMCP (read-only server over stdio)
+    "apscheduler>=3.10",      # scheduler entrypoint — EXACTLY ONE instance (single-instance guard)
+    "structlog>=24.1",        # structured logs; never log secrets/auth/PII
+    "tenacity>=8.2",          # exponential backoff + jitter; respect Retry-After; no retry on most 4xx
+    "pyyaml>=6.0",            # git-tracked source registry YAML (mirrored into the source table)
+]
+
+# Optional dependency extras. Install with, e.g.:
+#   uv sync --extra dev
+#   uv sync --extra local-embeddings
+#   uv sync --extra cloud --extra api
+[project.optional-dependencies]
+
+# Local, offline embeddings + NLP (privacy-preserving; default dev posture for PII-bearing docs).
+# EMBEDDING_BACKEND=local uses sentence-transformers; spaCy small model + rules for NER/topics.
+local-embeddings = [
+    "sentence-transformers>=3.0",
+    "spacy>=3.7",
+]
+
+# Cloud embedding backends (EMBEDDING_BACKEND=openai|google).
+# NOTE: cloud embeddings egress document text (which can contain PII) to a third-party
+# (and likely third-country) processor. Prefer local backends for PII-bearing docs, or
+# configure no-training / zero-retention / a DPA. See docs/compliance/README.md.
+cloud = [
+    "openai>=1.30",
+    "google-genai>=0.3",
+]
+
+# Hosted LLM summary backends (LLM_BACKEND=api). Same cloud-egress caveat as above;
+# a HARD monthly spend cap (LLM_MONTHLY_SPEND_CAP_EUR) is enforced when api is used.
+api = [
+    "openai>=1.30",
+    "google-genai>=0.3",
+    "anthropic>=0.34",
+]
+
+# Optional thin read-only dashboard surface (only if a dashboard is wanted).
+web = [
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+]
+
+# Optional single-binary external search (only if Postgres FTS is outgrown).
+search = [
+    "meilisearch>=0.31",
+]
+
+# Developer toolchain + quality gates + test layers.
+dev = [
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "respx>=0.21",        # mock httpx for connector contract tests (no live network in unit)
+    "vcrpy>=6.0",         # record/replay cassettes for opt-in live-source tests
+    "pip-audit>=2.7",     # dependency vulnerability audit (CI + local)
+    "pre-commit>=3.7",    # local hook runner (mirrors CI gates)
+    "detect-secrets>=1.5",# secrets baseline + scan (repo-side; pairs with sanitize_for_storage)
+    "types-pyyaml>=6.0",  # type stubs for mypy
+]
+
+[project.scripts]
+# The `atlas` CLI is a Typer app. EXACT module path is FINALIZED in MVP block B1
+# once the import/packaging layout is settled; this is the declared intent.
+atlas = "atlascore.cli.main:app"
+
+[project.urls]
+# Private repo for now; published as code-not-data later. Placeholders until then.
+Homepage = "https://example.invalid/atlascore"
+Documentation = "https://example.invalid/atlascore/docs"
+Repository = "https://example.invalid/atlascore"
+
+# ---------------------------------------------------------------------------
+# uv configuration
+# ---------------------------------------------------------------------------
+# uv manages the virtual environment and the committed uv.lock. Common flow:
+#   uv venv && uv sync --extra dev      # create .venv + install deps + dev extra
+#   uv lock                             # regenerate the lockfile after dep changes
+#   uv run atlas --help                 # run the CLI inside the managed env
+[tool.uv]
+package = true
+
+# ---------------------------------------------------------------------------
+# Ruff — format + lint (the single formatter/linter; mirrors pre-commit and CI)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps", "packages", "tests"]
+extend-exclude = [
+    ".venv",
+    "migrations/versions",  # autogenerated alembic revisions
+]
+
+[tool.ruff.lint]
+# Boring, maintainable code over cleverness. A pragmatic, strict-ish ruleset.
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort (import ordering)
+    "N",    # pep8-naming
+    "UP",   # pyupgrade (modern 3.12 syntax)
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "PTH",  # flake8-use-pathlib
+    "RUF",  # ruff-specific rules
+    "S",    # flake8-bandit (security)
+    "T20",  # flake8-print (no stray print() — use structlog)
+    "ASYNC",# flake8-async
+    "DTZ",  # flake8-datetimez (timezone-aware UTC only)
+]
+ignore = [
+    "E501",  # line length handled by the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use assert and bind to all interfaces in fixtures; allow noisier patterns.
+"tests/**/*.py" = ["S101", "S105", "S106", "S311", "T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["atlascore"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ---------------------------------------------------------------------------
+# mypy — static typing (light in pre-commit, full in CI)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["apps", "packages"]
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_reexport = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+plugins = ["pydantic.mypy"]
+exclude = '(^|/)migrations/versions/'
+
+# Third-party libraries without type stubs — silence missing imports narrowly.
+[[tool.mypy.overrides]]
+module = [
+    "feedparser.*",
+    "trafilatura.*",
+    "pgvector.*",
+    "apscheduler.*",
+    "sentence_transformers.*",
+    "spacy.*",
+    "vcr.*",
+    "respx.*",
+]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---------------------------------------------------------------------------
+# pytest — unit + contract + integration layers (NO live network in unit)
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+markers = [
+    "unit: pure logic; no live network, no DB",
+    "contract: connectors against fixtures / mocked HTTP (respx)",
+    "integration: DB / raw-store / search / queue paths (Postgres 16 service)",
+    "smoke: local Docker Compose end-to-end",
+    "security: SSRF / sanitizer / secrets-in-logs / prompt-injection regressions",
+    "live: opt-in, rate-limited tests against real sources (off by default)",
+]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["apps", "packages"]
+omit = ["migrations/*", "tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

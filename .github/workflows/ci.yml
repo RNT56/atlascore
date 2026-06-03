@@ -1,0 +1,238 @@
+# AtlasCore CI (date: 2026-06-03)
+#
+# Open-source-grade hygiene from day one (repo is PRIVATE first, publishable later as code-not-data).
+# Jobs mirror SPEC §11:
+#   - lint-format : ruff format --check + ruff lint
+#   - typecheck   : mypy
+#   - test        : pytest (unit + contract; NO live network)
+#   - audit       : pip-audit
+#   - migrations  : alembic migration check (offline SQL dry run + autogenerate-diff guard)
+#   - source-yaml : source-registry YAML schema validation
+#   - secrets-scan: detect-secrets (repo scan; complements in-DB sanitize_for_storage, SPEC item 8)
+#   - integration : OPTIONAL — Postgres 16 + pgvector service container (DB/raw/search/queue paths)
+#
+# Python 3.12. Dependencies are uv-managed and locked (pyproject.toml + uv.lock).
+# Unit/contract tests MUST NOT touch the network (SPEC §19); respx/vcrpy back the connector tests.
+
+name: ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Belt-and-suspenders: discourage accidental network use inside unit tests.
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lint-format:
+    name: ruff format + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: ruff format --check
+        run: uv run ruff format --check .
+      - name: ruff lint
+        run: uv run ruff check .
+
+  typecheck:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: mypy
+        run: uv run mypy .
+
+  test:
+    name: pytest (unit + contract, no network)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: pytest (unit + contract only; live-network tests are opt-in and skipped here)
+        run: uv run pytest tests/unit -q
+        env:
+          # Deterministic, offline test config (SPEC §19). No real DB/secrets in unit/contract tests.
+          APP_ENV: ci
+          EMBEDDING_BACKEND: local
+          LLM_BACKEND: none
+
+  audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: pip-audit (vulnerability scan of locked deps)
+        run: uv run pip-audit --strict
+
+  migrations:
+    name: alembic migration check
+    runs-on: ubuntu-latest
+    # Real Postgres 16 + pgvector so migrations exercise vector/pg_trgm and partitioning DDL.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: atlascore
+          POSTGRES_PASSWORD: atlascore
+          POSTGRES_DB: atlascore_ci
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U atlascore -d atlascore_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://atlascore:atlascore@localhost:5432/atlascore_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: Offline SQL dry run (migrations emit valid SQL without a live DB)
+        run: uv run alembic upgrade head --sql
+      - name: Apply migrations to a real Postgres 16 + pgvector
+        run: uv run alembic upgrade head
+      - name: Guard against un-generated schema drift (model vs migrations)
+        # autogenerate must produce an EMPTY migration: schemas/ (Pydantic+SQLAlchemy) and the
+        # applied migrations must agree, or this fails the build (SPEC §22 "migrations exist").
+        run: |
+          uv run alembic revision --autogenerate -m "ci-drift-check" --rev-id ci_drift_check
+          if grep -Eq "op\.(create_table|drop_table|add_column|drop_column|alter_column|create_index|drop_index)" \
+                migrations/versions/ci_drift_check_*.py; then
+            echo "::error::Schema drift detected — models changed without a migration. Run alembic revision --autogenerate." >&2
+            cat migrations/versions/ci_drift_check_*.py
+            exit 1
+          fi
+          rm -f migrations/versions/ci_drift_check_*.py
+          echo "No schema drift: models and migrations agree."
+
+  source-yaml:
+    name: source-registry YAML validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: Validate every source YAML against the canonical schema
+        # Uses the same code path as `atlas source validate` (SPEC §4 canonical shapes:
+        # policy/status default-deny, structured retention + freshness, fetch.connector/schedule).
+        # No live network: validation is schema-only.
+        run: uv run atlas source validate --all
+
+  secrets-scan:
+    name: secrets scan (detect-secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install detect-secrets
+        run: uv tool install detect-secrets
+      - name: Scan repo against baseline
+        # A committed .secrets.baseline records known/allowlisted false positives.
+        # NOTE: this is the REPO-level scan; it cannot see secrets that leak into Postgres/pg_dump.
+        # In-database sinks (crawl_job.last_error/payload, audit_log.detail) are protected separately
+        # by packages/security/secrets:sanitize_for_storage + the B15 secrets-in-logs regression test.
+        run: |
+          uvx detect-secrets scan --baseline .secrets.baseline
+          uvx detect-secrets audit --report --fail-on-unaudited .secrets.baseline
+
+  # ---------------------------------------------------------------------------
+  # OPTIONAL integration job: DB / raw-store / search / queue paths against a real
+  # Postgres 16 + pgvector. Heavier; kept separate so the fast lane stays fast.
+  # Still NO live external network — only the local service container.
+  # ---------------------------------------------------------------------------
+  integration:
+    name: integration (postgres 16 + pgvector)
+    runs-on: ubuntu-latest
+    # Run on main and on demand; skip on routine PRs unless explicitly requested.
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: atlascore
+          POSTGRES_PASSWORD: atlascore
+          POSTGRES_DB: atlascore_ci
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U atlascore -d atlascore_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      APP_ENV: ci
+      DATABASE_URL: postgresql+psycopg://atlascore:atlascore@localhost:5432/atlascore_ci
+      RAW_STORE_DIR: ${{ runner.temp }}/atlascore-raw
+      EMBEDDING_BACKEND: local
+      LLM_BACKEND: none
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: Prepare raw store dir
+        run: mkdir -p "$RAW_STORE_DIR"
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+      - name: Integration tests (DB / raw-store / search / queue)
+        run: uv run pytest tests/integration -q
