@@ -194,7 +194,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may use assert and bind to all interfaces in fixtures; allow noisier patterns.
-"tests/**/*.py" = ["S101", "S105", "S106", "S311", "T20"]
+"tests/**/*.py" = ["S101", "S104", "S105", "S106", "S311", "T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["atlascore"]

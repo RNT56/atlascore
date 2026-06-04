@@ -13,7 +13,8 @@ first tagged release, all work accumulates under **[Unreleased]**.
 This entry covers the planning + documentation scaffold, the **B1 skeleton** (the `atlascore`
 package, the Alembic harness, and the `source` schema), the **B2 source registry** (canonical YAML,
 default-deny, and the `atlas source` CLI), and the **B3 raw store + job queue** (content-addressed
-raw storage, the `crawl_job` queue, and `sanitize_for_storage`). The MVP continues at block **B4**.
+raw storage, the `crawl_job` queue, and `sanitize_for_storage`), and the **B4 RSS connector +
+SSRF-guarded fetcher + worker**. The MVP continues at block **B5**.
 
 ### Added
 
@@ -125,5 +126,21 @@ raw storage, the `crawl_job` queue, and `sanitize_for_storage`). The MVP continu
   (CLAUDE.md §14). Routed through `enqueue`/`fail`.
 - **`atlas crawl` CLI** — `enqueue` (enqueue a fetch job for a fetchable source; default-deny
   enforced) and `dlq` (inspect dead jobs). Shared `cli/_db.py` session helper.
+
+### Added — B4 (RSS connector + SSRF-guarded fetcher + worker)
+
+- **SSRF / URL-safety guard** — `atlascore.security.url_safety`: scheme allowlist (`http`/`https`),
+  resolve-and-validate-all-IPs (reject loopback/RFC1918/CGNAT/link-local/ULA/IPv4-mapped/metadata and
+  anything not globally routable), and per-redirect re-validation. Connection-pinning to the validated
+  IP is a documented follow-up — [ADR 0014](docs/decisions/0014-ssrf-validate-all-ips-pin-deferred.md).
+- **Connector SDK + fetcher** — `atlascore.connectors_sdk`: the `Connector` interface, `FetchContext`,
+  a per-host `HostRateLimiter`, and `SafeFetcher` (an SSRF-guarded `httpx` fetcher with ETag/
+  Last-Modified conditional requests, manual capped redirect handling, MIME allowlist, and a size cap).
+- **RSS connector** — `atlascore.connectors.rss.RssConnector` (feedparser; stable GUID extraction;
+  fails loudly only on non-feed content).
+- **Fetch worker** — `atlascore.worker`: `run_fetch_job`/`run_one_fetch` drive fetch → store raw before
+  parse → enqueue one `parse` job per GUID (idempotent, so re-fetch ignores seen GUIDs) → checkpoint
+  via stored ETag/Last-Modified; claim and process run in separate transactions. The **single-fetch-worker
+  startup guard (R16)** is a Postgres advisory lock. `atlas crawl once` enqueues + runs one fetch.
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

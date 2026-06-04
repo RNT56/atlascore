@@ -17,3 +17,19 @@ class PolicyError(AtlasError):
 
 class SourceValidationError(ConfigError):
     """A source-registry YAML failed validation (schema, grammar, or policy)."""
+
+
+class SecurityError(AtlasError):
+    """A security guard refused an operation."""
+
+
+class SsrfError(SecurityError):
+    """A URL/host failed the SSRF / URL-safety guard (bad scheme or disallowed IP)."""
+
+
+class FetchError(AtlasError):
+    """A fetch failed validation (bad status, MIME, size) or exceeded the redirect cap."""
+
+
+class FetchWorkerBusyError(AtlasError):
+    """Another fetch worker already holds the single-fetch-worker lock (R16)."""

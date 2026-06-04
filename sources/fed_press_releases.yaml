@@ -10,7 +10,8 @@ id: fed_press_releases
 name: Federal Reserve Board — Press Releases
 category: central_bank
 access_method: rss
-base_url: https://www.federalreserve.gov
+# For an RSS source, base_url is the feed URL the connector fetches.
+base_url: https://www.federalreserve.gov/feeds/press_all.xml
 enabled: true
 policy:
   status: approved

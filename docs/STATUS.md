@@ -8,17 +8,20 @@
 
 ## Current phase
 
-**Block B3 — DONE (2026-06-03). Next: B4.**
+**Block B4 — DONE (2026-06-03). Next: B5.**
 
-The raw store and the `crawl_job` queue are in place and verified end-to-end against a real
-Postgres 16: migration `0002` (`crawl_job` status-machine + DLQ, `raw_document` content-addressed),
-the immutable gzip raw store, the queue (`SELECT … FOR UPDATE SKIP LOCKED`, retry→pending with
-exponential backoff, →`dead` over `max_attempts`, stale-claim reclaim), `sanitize_for_storage`
-(redacts secrets before `crawl_job.last_error`/`payload`), and the `atlas crawl enqueue`/`dlq` CLI.
-**Done-when met:** integration tests demonstrate claim/complete, fail→retry→dead, SKIP-LOCKED across
-two workers, and stale reclaim; raw payloads are gzipped + content-addressed on disk; `atlas crawl
-enqueue` enqueued a fetch job. `make test` green offline (92 unit pass; 15 integration skip);
-15 integration tests pass with a DB. **B1** and **B2** are also DONE.
+The RSS connector + SSRF-guarded fetcher are in place and **verified live against the real Federal
+Reserve RSS feed**: the SSRF/URL-safety guard (`security/url_safety`: scheme allowlist +
+resolve-and-validate-all-IPs + per-redirect re-validation; pinning deferred per
+[ADR 0014](decisions/0014-ssrf-validate-all-ips-pin-deferred.md)), the per-host rate limiter, the
+`connectors_sdk` interface, the SSRF-guarded `httpx` fetcher (ETag/Last-Modified conditional
+requests), the generic RSS connector, the worker (`run_fetch_job`/`run_one_fetch` + the
+single-fetch-worker advisory-lock guard, R16), and `atlas crawl once`. **Done-when met:**
+`atlas crawl once` fetched the Fed feed (20 entries), captured the raw payload gzipped on disk +
+a `raw_document` row, and enqueued one `parse` job per GUID; a second run got a real **304 Not
+Modified** (conditional request) — duplicate GUIDs ignored, no new raw. `make test` green offline
+(147 unit/contract pass; 16 integration skip); 16 integration tests pass with a DB; a 27-case SSRF
+classification audit passes. **B1**, **B2**, and **B3** are also DONE.
 
 The MVP is a single ordered backlog of 15 blocks (**B1–B15**). See
 [`PROJECT-PLAN.md`](PROJECT-PLAN.md) §MVP for the authoritative list. Discipline: freeze scope
@@ -78,34 +81,47 @@ until the current set runs unattended for a month before adding sources or servi
   - `atlas crawl enqueue` (default-deny enforced) / `dlq`; shared `cli/_db.py` session helper.
   - 24 new tests (hashing, sanitize attack-cases, raw store, backoff; queue state machine + SKIP
     LOCKED + reclaim + raw_document dedupe integration). Migration drift-free + reversible; gates green.
+- **B4 — RSS connector + SSRF-guarded fetcher + worker (2026-06-03).**
+  - `atlascore.security.url_safety`: the SSRF guard (scheme allowlist; reject
+    loopback/RFC1918/CGNAT/link-local/ULA/IPv4-mapped/metadata via `not is_global` + explicit checks;
+    resolve + validate ALL IPs; per-redirect re-validation). Connection-pinning deferred —
+    [ADR 0014](decisions/0014-ssrf-validate-all-ips-pin-deferred.md).
+  - `connectors_sdk` (`Connector` ABC, `FetchContext`, `HostRateLimiter`, `SafeFetcher`): the
+    SSRF-guarded `httpx` fetcher — conditional requests (ETag/Last-Modified), manual redirect handling
+    with a cap, MIME allowlist + size cap, per-host even-spacing rate limit.
+  - `atlascore.connectors.rss.RssConnector` (feedparser; GUID extraction; fail-loud on non-feed).
+  - `atlascore.worker` (`run_fetch_job`/`run_one_fetch`): fetch → store raw before parse → enqueue one
+    `parse` job per GUID (idempotent dedupe) → checkpoint ETag/Last-Modified; claim/process in separate
+    txns; single-fetch-worker advisory-lock guard (R16). `atlas crawl once`.
+  - 17 new tests (SSRF, rate limiter, RSS parse, fetcher contract via respx, worker integration) +
+    a 27-case SSRF audit. Verified LIVE against the Federal Reserve feed (fetch + 304 conditional + dedup).
 
 ---
 
 ## In progress
 
-*(none)* — B3 closed. B4 not yet claimed.
+*(none)* — B4 closed. B5 not yet claimed.
 
 ---
 
 ## Next
 
-**B4 — RSS connector (ETag/Last-Modified) + fetcher (SSRF/URL-safety + per-host rate limiting).**
+**B5 — Article parser (trafilatura + fallback) → canonical `document` + content hashing +
+dedupe (URL + hash).**
 
 Concrete next steps:
 
-1. `connectors_sdk`: the `Connector` ABC + result types + a contract-test harness (no live network).
-2. `security/url_safety`: the SSRF guard (scheme allowlist; reject loopback/RFC1918/CGNAT/link-local/
-   ULA/IPv4-mapped/metadata; resolve + pin the validated IP; re-validate every redirect hop) — applied
-   to the fetcher AND any agent-supplied URL.
-3. The fetcher: shared SSRF-guarded `httpx` client, conditional requests (ETag/If-None-Match,
-   Last-Modified/If-Modified-Since), `DEFAULT_USER_AGENT`, per-host in-process token bucket, and the
-   **single-fetch-worker startup guard** (R16/R5) — refuses a second fetch worker until the
-   `host_rate_state` scale-up path exists.
-4. The generic RSS connector → store raw (the B3 raw store) before parse; dedupe on feed GUID;
-   the worker loop that *runs* a fetch `crawl_job` and `atlas crawl once`.
-5. Fixtures: success/empty/malformed/rate-limit/drift/deleted (no live network, respx/vcrpy).
+1. Migration `0003`: the `document` table (current-state, last-write-wins; partial-unique
+   `canonical_url`; FTS `tsvector` GIN over `body_text`; `GIN(topics)`/`GIN(entity_ids)`; btree
+   indexes) — docs/schemas §2.4. Pydantic `DocumentRecord` + ORM model.
+2. The article parser (`parsers/article`, trafilatura + a readability/newspaper fallback): raw HTML →
+   sanitized `body_text` + title + canonical_url + published_at; pinned `parser_version`; golden tests.
+3. A `parse` worker that consumes the `parse` jobs B4 enqueues (payload: guid/link/raw_document_id),
+   reads the immutable raw, parses, and writes/updates a `document` (content-hash + URL dedupe;
+   re-parse = last-write-wins). HTML sanitizer (`security/sanitization`) lands here.
+4. Parser golden-output fixtures in CI (one per source); content hashing on parsed body.
 
-**Definition of done for B4:** RSS items fetched, raw captured, duplicate GUIDs ignored.
+**Definition of done for B5:** documents created; parser golden fixtures in CI.
 
 Then onward through B15. Build-order dependencies to remember: **B7** ships `search_documents` +
 the `audit_log` table + result caps; **B8** adds `source_health` + the freshness job +

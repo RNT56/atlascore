@@ -34,6 +34,7 @@ deep-dive instead.
 | [0011](0011-mcp-read-only-seven-tool-surface.md) | Expose a read-only seven-tool MCP surface over stdio with injection safety and side-effect confirmation instead of RBAC | Accepted | 2026-06-03 | — |
 | [0012](0012-packaging-layout-src-atlascore.md) | Adopt a single `src/atlascore` import root; preserve `packages`/`apps` as the subpackage grouping | Accepted | 2026-06-03 | — (B1 packaging) |
 | [0013](0013-source-registry-on-disk-and-slug-round-trip.md) | Source registry in `sources/`; YAML slug round-trips in `config`; B2 adds `source sync`/`list` | Accepted | 2026-06-03 | — (B2 registry) |
+| [0014](0014-ssrf-validate-all-ips-pin-deferred.md) | SSRF guard validates all resolved IPs + re-validates redirects; connection-pinning deferred | Accepted | 2026-06-03 | — (B4 SSRF/§14) |
 
 > ADRs 0001–0011 encode the canonical-spec resolutions R1–R8 plus the naming and
 > MCP-surface decisions: R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008,
