@@ -235,7 +235,7 @@ jobs:
     env:
       APP_ENV: ci
       DATABASE_URL: postgresql+psycopg://atlascore:atlascore@localhost:5432/atlascore_ci
-      RAW_STORE_DIR: ${{ runner.temp }}/atlascore-raw
+      RAW_STORE_DIR: ${{ github.workspace }}/atlascore-raw
       EMBEDDING_BACKEND: local
       LLM_BACKEND: none
     steps:
