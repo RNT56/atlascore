@@ -22,6 +22,17 @@ def _entry_guid(entry: Any) -> str | None:
     return str(guid) if guid else None
 
 
+def _entry_content_html(entry: Any) -> str | None:
+    # Prefer the full content (RSS <content:encoded> / Atom <content>) over the summary.
+    content = entry.get("content")
+    if content:
+        value = content[0].get("value")
+        if value:
+            return str(value)
+    summary = entry.get("summary")
+    return str(summary) if summary else None
+
+
 def _entry_published(entry: Any) -> datetime | None:
     parsed = entry.get("published_parsed") or entry.get("updated_parsed")
     if parsed is None:
@@ -82,6 +93,7 @@ class RssConnector(Connector):
                     title=raw.get("title"),
                     published=_entry_published(raw),
                     summary=raw.get("summary"),
+                    content_html=_entry_content_html(raw),
                 )
             )
         return entries

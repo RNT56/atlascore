@@ -139,6 +139,18 @@ Fetched HTML is hostile. Sanitization happens before any text is indexed (FTS), 
 
 Use an allowlist (not a blocklist) approach: keep a known-safe set of structural/text tags and attributes; drop everything else.
 
+> **Implemented (B5) — `strip_html`.** Because every MVP surface stores/returns sanitized
+> **text** (`document.body_text` is the FTS source; no surface returns *sanitized HTML*),
+> `atlascore.security.sanitization.strip_html` takes the **strongest** allowlist position: it
+> keeps **no** tags and emits only the visible text, dropping the *contents* of active-content
+> elements (`<script>`/`<style>`/`<iframe>`/`<object>`/`<form>`/…) via a stdlib `HTMLParser`.
+> Since no tag, attribute, or URL survives, `javascript:`/`data:` links, `on*` handlers, and
+> redirect primitives are neutralized by construction; entities are decoded; block boundaries
+> become newlines. A tag-*preserving* allowlist sanitizer (needed only if a future surface ever
+> returns sanitized HTML rather than text) is intentionally **deferred** — it would add attack
+> surface for no MVP benefit. The article parser (B5) runs `strip_html` as both its fallback
+> extractor and a defense-in-depth pass; feedparser independently sanitizes feed HTML first.
+
 ### 4.2 Where sanitized vs. raw text flows
 
 | Surface | What is returned |

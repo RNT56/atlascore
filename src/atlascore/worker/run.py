@@ -152,7 +152,11 @@ def run_fetch_job(
     slug = config.get("slug") or str(source.id)
     new_entries = 0
     for entry in entries:
-        dedupe_key = f"parse:{slug}:{entry.guid}"
+        # Key the parse job on (guid, raw content hash), not the guid alone: when a publisher
+        # edits an item in place under a stable GUID, the feed's bytes change -> a NEW raw is
+        # stored -> a NEW parse job is enqueued and the edit is re-parsed (last-write-wins, R2).
+        # An unchanged refetch yields the same raw hash -> same key -> idempotent no-op.
+        dedupe_key = f"parse:{slug}:{entry.guid}:{raw_doc.content_hash}"
         already = session.scalar(select(CrawlJob.id).where(CrawlJob.dedupe_key == dedupe_key))
         enqueue(
             session,

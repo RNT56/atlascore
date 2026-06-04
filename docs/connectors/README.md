@@ -431,6 +431,15 @@ wires.
   timezone-naive dates (preserve source-local + normalize to UTC), feed-drift
   (schema changes mid-stream — see fixtures).
 
+> **Implemented (B5).** The fetch worker enqueues one `parse` job per GUID keyed
+> `parse:<slug>:<guid>:<raw_content_hash>` (content-aware, so a same-GUID in-place edit
+> re-parses). The **network-free** parse worker (`worker/parse.py`) reads the immutable raw,
+> extracts each entry's richest body (`FeedEntry.content_html`: `content:encoded` ↦ `summary`),
+> runs `parsers/article.ArticleParser` (trafilatura + the nh3 `strip_html` fallback that does
+> the work for short feed summaries), and upserts a `document` last-write-wins on `canonical_url`
+> (R2; content-hash + GUID-aware dedupe for link-less items). `atlas parse <raw_id>` re-parses a
+> whole raw.
+
 ### 7.2 FRED (Federal Reserve Economic Data) — `packages/connectors/fred`
 
 - **Access:** `api` (JSON). Macro time-series.

@@ -31,6 +31,28 @@ def _database_url() -> str:
     return url or get_settings().database_url
 
 
+# Expression / partial / GIN indexes that Alembic autogenerate cannot reliably reflect or
+# compare (functional ``to_tsvector`` index, partial-unique ``WHERE`` index, array GINs).
+# They are created via raw SQL in their migration and are NOT declared on the ORM model;
+# excluding their names here keeps the autogenerate drift-check (CI) from emitting spurious
+# create/drop for them on either the model or the reflected DB side. See migration 0003.
+_MANUAL_INDEXES = frozenset(
+    {
+        "uq_document_canonical_url",
+        "ix_document_fts",
+        "ix_document_topics",
+        "ix_document_entity_ids",
+    }
+)
+
+
+def _include_object(
+    obj: object, name: str | None, type_: str, reflected: bool, compare_to: object
+) -> bool:
+    """Skip manually-managed expression/partial indexes during autogenerate."""
+    return not (type_ == "index" and name in _MANUAL_INDEXES)
+
+
 def run_migrations_offline() -> None:
     """Emit SQL without a live DB connection (``alembic upgrade head --sql``)."""
     context.configure(
@@ -40,6 +62,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -60,6 +83,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             compare_server_default=True,
+            include_object=_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

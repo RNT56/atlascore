@@ -118,3 +118,35 @@ def test_oversized_payload_raises() -> None:
     )
     with pytest.raises(FetchError, match="exceeds cap"):
         _fetcher().fetch("https://feed.test/rss", max_bytes=1024)
+
+
+@respx.mock
+def test_decompression_bomb_is_aborted_mid_stream() -> None:
+    # 84 compressed bytes decode to 50 KB; Content-Length (compressed) is under the cap, so only
+    # the incremental DECODED-byte cap catches it — proving the body is never fully materialized.
+    import gzip
+
+    bomb = gzip.compress(b"A" * 50_000)
+    respx.get("https://feed.test/rss").mock(
+        return_value=httpx.Response(
+            200,
+            content=bomb,
+            headers={"content-type": "application/xml", "content-encoding": "gzip"},
+        )
+    )
+    with pytest.raises(FetchError, match="aborted mid-stream"):
+        _fetcher().fetch("https://feed.test/rss", max_bytes=1024)
+
+
+@respx.mock
+def test_oversized_content_length_rejected_before_body() -> None:
+    route = respx.get("https://feed.test/rss").mock(
+        return_value=httpx.Response(
+            200,
+            content=b"x" * 8,
+            headers={"content-type": "application/xml", "content-length": "999999"},
+        )
+    )
+    with pytest.raises(FetchError, match="Content-Length"):
+        _fetcher().fetch("https://feed.test/rss", max_bytes=1024)
+    assert route.called

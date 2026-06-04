@@ -21,10 +21,16 @@ class FetchOutcome:
 
 @dataclass(frozen=True)
 class FeedEntry:
-    """A single feed item, identified by its stable GUID (for dedupe)."""
+    """A single feed item, identified by its stable GUID (for dedupe).
+
+    ``content_html`` is the richest body the feed offers (``content:encoded`` / Atom
+    ``<content>``, else ``<description>``/``summary``) — the article parser (B5) turns it
+    into the canonical ``document`` body. May be HTML; treat as untrusted (sanitized at parse).
+    """
 
     guid: str
     link: str | None = None
     title: str | None = None
     published: datetime | None = None
     summary: str | None = None
+    content_html: str | None = None

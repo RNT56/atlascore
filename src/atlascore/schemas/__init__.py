@@ -6,6 +6,7 @@ tables). B1 ships only the ``source`` shape; later blocks add the rest.
 
 from __future__ import annotations
 
+from atlascore.schemas.document import DocumentRecord
 from atlascore.schemas.source import (
     AccessMethod,
     Freshness,
@@ -22,6 +23,7 @@ from atlascore.schemas.source import (
 
 __all__ = [
     "AccessMethod",
+    "DocumentRecord",
     "Freshness",
     "PolicyStatus",
     "RateLimit",

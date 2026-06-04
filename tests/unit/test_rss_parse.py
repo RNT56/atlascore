@@ -45,3 +45,22 @@ def test_entry_without_stable_id_is_skipped() -> None:
 def test_malformed_feed_raises() -> None:
     with pytest.raises(ValueError, match="unparseable"):
         RssConnector().parse_entries(MALFORMED)
+
+
+CONTENT_ENCODED = b"""<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel><title>T</title>
+    <item><title>A</title><guid>guid-a</guid><link>https://x.test/a</link>
+      <description>short summary</description>
+      <content:encoded><![CDATA[<p>full body content</p>]]></content:encoded></item>
+    <item><title>B</title><guid>guid-b</guid><link>https://x.test/b</link>
+      <description>only a summary here</description></item>
+  </channel></rss>"""
+
+
+def test_content_html_prefers_content_encoded_over_summary() -> None:
+    entries = {e.guid: e for e in RssConnector().parse_entries(CONTENT_ENCODED)}
+    # content:encoded wins over <description> when both are present.
+    assert "full body content" in (entries["guid-a"].content_html or "")
+    # falls back to the summary when there is no content:encoded.
+    assert entries["guid-b"].content_html == "only a summary here"

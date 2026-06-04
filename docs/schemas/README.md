@@ -310,6 +310,18 @@ CREATE INDEX document_src_pub_idx    ON document (source_id, published_at);
 CREATE INDEX document_cluster_idx    ON document (cluster_id);
 ```
 
+> **Implemented (B5) — migration `0003`.** The plain btree indexes
+> (`published_at`, `(source_id, published_at)`, `cluster_id`) are declared on the ORM model so
+> Alembic autogenerate manages them. The three expression/partial indexes Alembic cannot
+> round-trip — the **partial-unique** `uq_document_canonical_url` (`WHERE canonical_url IS NOT
+> NULL`), the **FTS** `ix_document_fts` (`gin (to_tsvector('simple', coalesce(body_text,'')))`),
+> and the **array GINs** `ix_document_topics` / `ix_document_entity_ids` — are created via raw
+> SQL in the migration and excluded from the autogenerate drift-check by `_include_object` in
+> `migrations/env.py`. The parse worker writes documents with a **last-write-wins** upsert keyed
+> on `canonical_url` (R2): re-parsing refreshes parser-owned fields in place and leaves
+> enrichment-owned columns (`topics`/`entity_ids`/`cluster_id`) untouched. Null-`canonical_url`
+> docs dedupe best-effort on `(source_id, raw_document_id, content_hash)`.
+
 ---
 
 ### 2.5 summary

@@ -13,8 +13,9 @@ first tagged release, all work accumulates under **[Unreleased]**.
 This entry covers the planning + documentation scaffold, the **B1 skeleton** (the `atlascore`
 package, the Alembic harness, and the `source` schema), the **B2 source registry** (canonical YAML,
 default-deny, and the `atlas source` CLI), and the **B3 raw store + job queue** (content-addressed
-raw storage, the `crawl_job` queue, and `sanitize_for_storage`), and the **B4 RSS connector +
-SSRF-guarded fetcher + worker**. The MVP continues at block **B5**.
+raw storage, the `crawl_job` queue, and `sanitize_for_storage`), the **B4 RSS connector +
+SSRF-guarded fetcher + worker**, and the **B5 article parser + canonical `document` + parse
+worker**. The MVP continues at block **B6**.
 
 ### Added
 
@@ -142,5 +143,57 @@ SSRF-guarded fetcher + worker**. The MVP continues at block **B5**.
   parse → enqueue one `parse` job per GUID (idempotent, so re-fetch ignores seen GUIDs) → checkpoint
   via stored ETag/Last-Modified; claim and process run in separate transactions. The **single-fetch-worker
   startup guard (R16)** is a Postgres advisory lock. `atlas crawl once` enqueues + runs one fetch.
+
+### Added — B5 (article parser + canonical `document` + parse worker)
+
+- **`document` table** (migration `0003`) — the current-state canonical record (docs/schemas §2.4):
+  Pydantic `DocumentRecord` + ORM `Document`. Plain btree indexes are model-declared
+  (autogenerate-managed); the partial-unique `uq_document_canonical_url` (`WHERE canonical_url IS
+  NOT NULL`), the FTS `ix_document_fts` (`gin(to_tsvector('simple', …))`), and the array GINs
+  `ix_document_topics`/`ix_document_entity_ids` are created via raw SQL and excluded from the
+  autogenerate drift-check by `_include_object` in `migrations/env.py`. FKs use `ON DELETE RESTRICT`
+  (R17).
+- **Article parser** — `atlascore.parsers.article.ArticleParser` (pinned `parser_version`
+  `article@1.0.0`): trafilatura primary + an HTML-sanitizer fallback that does the work for RSS
+  summaries → sanitized `body_text` + title + canonical_url + published_at. Golden output pinned.
+- **HTML sanitizer** — `atlascore.security.sanitization.strip_html`: a text-only (strongest
+  allowlist) sanitizer built on **nh3** (a real HTML5 tokenizer) with a block-aware stdlib second
+  pass; drops the contents of active-content elements and neutralizes `javascript:`/`on*`/`<iframe>`
+  by construction.
+- **Parse worker** — `atlascore.worker.parse`: `run_parse_job`/`run_one_parse` consume the per-GUID
+  parse jobs B4 enqueues (network-free, may scale out, no fetch lock); `reparse_raw_document` backs
+  `atlas parse <raw_id>`. `upsert_document` is last-write-wins on `canonical_url` (R2), preserving
+  enrichment-owned columns; content-hash dedupe makes replays/re-parses idempotent.
+- **`atlas parse <raw_id>`** CLI — (re)parse one immutable raw document into canonical documents.
+- **Tests** — sanitizer (incl. adversarial regressions), article-parser golden, document upsert
+  semantics, and the full B4→B5 chain integration (fetch → raw → parse → documents → FTS → idempotent
+  re-parse) against Postgres 16.
+
+### Fixed / Security — B5 adversarial review
+
+A multi-agent adversarial review (each finding independently refuted by a skeptic) drove these fixes:
+
+- **Sanitizer (high):** the previous hand-rolled `html.parser` + depth-counter `strip_html` leaked
+  active content on adversarial markup (an unterminated attribute quote in a `<script>` start tag
+  was mis-tokenized as text; a stray drop-tag close zeroed a shared counter held by another open
+  element). Replaced with **nh3** (real HTML5 tokenizer) + a per-element drop **stack**; added
+  regressions for both attack classes.
+- **Fetcher (medium):** the response size cap was applied only *after* the full body was buffered
+  and auto-decompressed, so a decompression bomb defeated the documented "runaway body" guard. The
+  body is now **streamed** with an incremental decoded-byte cap (mid-stream abort), a `Content-Length`
+  early reject, and a pre-stream MIME check.
+- **Parse (medium):** a same-GUID in-place feed edit was stranded (the parse `dedupe_key` was
+  GUID-only, so the new raw was never re-parsed). The key now includes the raw `content_hash`,
+  re-enqueuing a parse job on a real change (R2).
+- **Parse (medium):** the null-`canonical_url` dedupe could collapse two distinct items with an
+  identical title+body. The content-hash fingerprint now folds in the feed GUID; the documented
+  limitation was corrected to disclose the real (over-insert) direction.
+- **Compliance (medium):** the feed `<title>` was stored verbatim while only the body was
+  sanitized. The title is now run through `strip_html` before persisting.
+
+### Changed — B5
+
+- **New runtime dependency `nh3`** (ammonia HTML5 sanitizer) — the security boundary for parsed
+  body/title text ([ADR 0015](docs/decisions/0015-b5-parse-pipeline-and-nh3-sanitizer.md)).
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

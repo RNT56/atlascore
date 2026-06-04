@@ -3,7 +3,14 @@
 Every outbound request — and every redirect hop — passes the SSRF/URL-safety guard
 (scheme allowlist + resolve-and-validate-all-IPs). Redirects are followed manually with a cap so
 each hop is re-validated. Conditional requests (ETag/Last-Modified) and a per-host rate limit are
-applied. The response size is capped to guard against decompression/runaway bodies.
+applied.
+
+The response body is **streamed** and the size cap is enforced **incrementally** on the decoded
+bytes (`response.iter_bytes()`), aborting the moment the running total exceeds `max_bytes`, so a
+small compressed payload that expands hugely (a decompression bomb) cannot be fully materialized
+in RAM — memory is bounded to roughly the cap plus one decode chunk. A `Content-Length` header
+over the cap is rejected before the body is read, and the MIME allowlist is checked from the
+headers before streaming, so a wrong-MIME or oversized body is never downloaded.
 
 Security note (B4): the guard validates the resolved IPs immediately before each connect and
 re-validates every redirect hop. Pinning the socket to the exact validated IP (the final
@@ -84,16 +91,17 @@ class SafeFetcher:
                 headers["If-None-Match"] = etag
             if last_modified:
                 headers["If-Modified-Since"] = last_modified
-            response = self._client.get(
-                current, headers=headers, follow_redirects=False, timeout=timeout
-            )
-            if response.status_code in _REDIRECT_CODES:
-                location = response.headers.get("location")
-                if not location:
-                    raise FetchError(f"redirect with no Location from {current!r}")
-                current = str(response.url.join(location))  # resolve relative redirects
-                continue
-            return self._finalize(response, accept_mime=accept_mime, max_bytes=max_bytes)
+            # Stream so the body is read (and decoded) incrementally under the size cap.
+            with self._client.stream(
+                "GET", current, headers=headers, follow_redirects=False, timeout=timeout
+            ) as response:
+                if response.status_code in _REDIRECT_CODES:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise FetchError(f"redirect with no Location from {current!r}")
+                    current = str(response.url.join(location))  # resolve relative redirects
+                    continue  # body unread; the context manager closes the connection
+                return self._finalize(response, accept_mime=accept_mime, max_bytes=max_bytes)
         raise FetchError(f"too many redirects (> {self._max_redirects}) starting at {url!r}")
 
     def _finalize(
@@ -111,16 +119,28 @@ class SafeFetcher:
             )
         if response.status_code >= 400 or response.status_code < 200:
             raise FetchError(f"HTTP {response.status_code} from {response.url}")
-        content = response.content
-        if len(content) > max_bytes:
-            raise FetchError(f"payload {len(content)} bytes exceeds cap {max_bytes}")
+        # Reject an over-cap Content-Length before reading the body (cheap early-out; the
+        # header is the *encoded* size, so it only catches uncompressed oversized bodies).
+        declared = response.headers.get("content-length")
+        if declared is not None and declared.isdigit() and int(declared) > max_bytes:
+            raise FetchError(f"Content-Length {declared} exceeds cap {max_bytes}")
+        # Check MIME from headers BEFORE streaming, so a wrong-MIME body is never downloaded.
         mime = response.headers.get("content-type", "").split(";")[0].strip().lower() or None
         if accept_mime is not None and mime not in accept_mime:
             raise FetchError(f"MIME {mime!r} not in allowlist {sorted(accept_mime)}")
+        # Stream the decoded body, aborting the moment the running total exceeds the cap, so a
+        # decompression bomb can never be fully materialized in memory.
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in response.iter_bytes():
+            total += len(chunk)
+            if total > max_bytes:
+                raise FetchError(f"payload exceeds cap {max_bytes} bytes (aborted mid-stream)")
+            chunks.append(chunk)
         return FetchOutcome(
             status=response.status_code,
             not_modified=False,
-            content=content,
+            content=b"".join(chunks),
             mime_type=mime,
             etag=response.headers.get("etag"),
             last_modified=response.headers.get("last-modified"),

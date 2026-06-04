@@ -8,20 +8,26 @@
 
 ## Current phase
 
-**Block B4 — DONE (2026-06-03). Next: B5.**
+**Block B5 — DONE (2026-06-04). Next: B6.**
 
-The RSS connector + SSRF-guarded fetcher are in place and **verified live against the real Federal
-Reserve RSS feed**: the SSRF/URL-safety guard (`security/url_safety`: scheme allowlist +
-resolve-and-validate-all-IPs + per-redirect re-validation; pinning deferred per
-[ADR 0014](decisions/0014-ssrf-validate-all-ips-pin-deferred.md)), the per-host rate limiter, the
-`connectors_sdk` interface, the SSRF-guarded `httpx` fetcher (ETag/Last-Modified conditional
-requests), the generic RSS connector, the worker (`run_fetch_job`/`run_one_fetch` + the
-single-fetch-worker advisory-lock guard, R16), and `atlas crawl once`. **Done-when met:**
-`atlas crawl once` fetched the Fed feed (20 entries), captured the raw payload gzipped on disk +
-a `raw_document` row, and enqueued one `parse` job per GUID; a second run got a real **304 Not
-Modified** (conditional request) — duplicate GUIDs ignored, no new raw. `make test` green offline
-(147 unit/contract pass; 16 integration skip); 16 integration tests pass with a DB; a 27-case SSRF
-classification audit passes. **B1**, **B2**, and **B3** are also DONE.
+The article parser + canonical `document` + parse worker are in place. Migration `0003` creates the
+`document` table (docs/schemas §2.4) with its partial-unique `canonical_url`, FTS `tsvector` GIN, and
+array GINs created via raw SQL + excluded from the autogenerate drift-check (`_include_object` in
+`migrations/env.py`). `parsers/article.ArticleParser` (trafilatura + sanitizer fallback; pinned
+`article@1.0.0`) and the **nh3-based** `security/sanitization.strip_html` produce sanitized
+`body_text`/title. The **network-free** parse worker (`run_parse_job`/`run_one_parse`/
+`reparse_raw_document`, `atlas parse <raw_id>`) consumes B4's per-GUID parse jobs and upserts
+documents last-write-wins (R2), URL + content-hash dedupe. **Done-when met:** documents created;
+parser golden fixture in CI; full B4→B5 chain (fetch → raw → parse → document → FTS → idempotent
+re-parse) verified on Postgres 16. **194 tests pass** (unit + contract + integration on a live DB);
+ruff/mypy clean; migration applies + drift-check empty on live PG16.
+
+A **multi-agent adversarial review** of B5 + the deferred B4 SSRF guard ran and confirmed 6 defects
+(refuting 1 non-finding); **all 6 are fixed** with regressions — see CHANGELOG "Fixed / Security — B5":
+the hand-rolled HTML sanitizer (active-content leak on adversarial markup → replaced with **nh3**),
+a fetcher decompression-bomb gap (→ **streamed incremental size cap**), a same-GUID-edit stranded
+parse (→ content-aware `dedupe_key`), a null-URL dedupe collapse (→ GUID-folded fingerprint), and an
+unsanitized feed title. **B1–B4** are also DONE.
 
 The MVP is a single ordered backlog of 15 blocks (**B1–B15**). See
 [`PROJECT-PLAN.md`](PROJECT-PLAN.md) §MVP for the authoritative list. Discipline: freeze scope
@@ -88,42 +94,53 @@ until the current set runs unattended for a month before adding sources or servi
     [ADR 0014](decisions/0014-ssrf-validate-all-ips-pin-deferred.md).
   - `connectors_sdk` (`Connector` ABC, `FetchContext`, `HostRateLimiter`, `SafeFetcher`): the
     SSRF-guarded `httpx` fetcher — conditional requests (ETag/Last-Modified), manual redirect handling
-    with a cap, MIME allowlist + size cap, per-host even-spacing rate limit.
+    with a cap, MIME allowlist + **streamed incremental size cap** (B5 review hardening).
   - `atlascore.connectors.rss.RssConnector` (feedparser; GUID extraction; fail-loud on non-feed).
   - `atlascore.worker` (`run_fetch_job`/`run_one_fetch`): fetch → store raw before parse → enqueue one
     `parse` job per GUID (idempotent dedupe) → checkpoint ETag/Last-Modified; claim/process in separate
     txns; single-fetch-worker advisory-lock guard (R16). `atlas crawl once`.
   - 17 new tests (SSRF, rate limiter, RSS parse, fetcher contract via respx, worker integration) +
     a 27-case SSRF audit. Verified LIVE against the Federal Reserve feed (fetch + 304 conditional + dedup).
+- **B5 — article parser + canonical `document` + parse worker (2026-06-04).**
+  - Migration `0003`: the `document` table (docs/schemas §2.4); partial-unique `canonical_url`, FTS
+    `tsvector` GIN, and array GINs via raw SQL, excluded from the drift-check by `_include_object`
+    (`migrations/env.py`). Pydantic `DocumentRecord` + ORM `Document` (FK `ON DELETE RESTRICT`).
+  - `parsers/article.ArticleParser` (`article@1.0.0`; trafilatura + `strip_html` fallback) and the
+    **nh3-based** `security/sanitization.strip_html` (text-only strongest allowlist + block-aware pass).
+  - `worker/parse` (`run_parse_job`/`run_one_parse`/`reparse_raw_document`): network-free, scales out,
+    no fetch lock; `storage.documents.upsert_document` last-write-wins on `canonical_url` (R2),
+    preserving enrichment columns; content-hash + URL dedupe; `atlas parse <raw_id>`.
+  - Adversarial review (B5 + deferred B4 SSRF) confirmed and **fixed 6 defects** with regressions
+    ([ADR 0015](decisions/0015-b5-parse-pipeline-and-nh3-sanitizer.md)); SSRF IP classification
+    independently re-audited (6to4/NAT64/IPv4-mapped/decimal-literal all correctly blocked).
+  - New tests: sanitizer (+ adversarial regressions), article-parser golden, document upsert,
+    full B4→B5 chain (+ same-GUID-edit and null-URL-collapse regressions). 194 pass total.
 
 ---
 
 ## In progress
 
-*(none)* — B4 closed. B5 not yet claimed.
+*(none)* — B5 closed (incl. the deferred B4 adversarial SSRF review). B6 not yet claimed.
 
 ---
 
 ## Next
 
-**B5 — Article parser (trafilatura + fallback) → canonical `document` + content hashing +
-dedupe (URL + hash).**
+**B6 — Postgres FTS index + CLI search.**
 
-Concrete next steps:
+The FTS index itself (`ix_document_fts`, `gin(to_tsvector('simple', coalesce(body_text,'')))`) already
+ships in migration `0003` (B5) per docs/schemas §2.4, so B6 focuses on the **query path**:
 
-1. Migration `0003`: the `document` table (current-state, last-write-wins; partial-unique
-   `canonical_url`; FTS `tsvector` GIN over `body_text`; `GIN(topics)`/`GIN(entity_ids)`; btree
-   indexes) — docs/schemas §2.4. Pydantic `DocumentRecord` + ORM model.
-2. The article parser (`parsers/article`, trafilatura + a readability/newspaper fallback): raw HTML →
-   sanitized `body_text` + title + canonical_url + published_at; pinned `parser_version`; golden tests.
-3. A `parse` worker that consumes the `parse` jobs B4 enqueues (payload: guid/link/raw_document_id),
-   reads the immutable raw, parses, and writes/updates a `document` (content-hash + URL dedupe;
-   re-parse = last-write-wins). HTML sanitizer (`security/sanitization`) lands here.
-4. Parser golden-output fixtures in CI (one per source); content hashing on parsed body.
+1. A search query over `document` (FTS `tsvector` match on `body_text`, ranked via `ts_rank`), with
+   filters for date range and source, and a result cap. Use the `'simple'` text-search config to
+   match the index (else the index won't be used).
+2. `atlas search "<query>" [--source <slug>] [--since <date>] [--limit N]` CLI returning sanitized
+   `body_text` snippet + provenance (title, canonical_url, source, published_at).
+3. Tests: search by text/date/source from the CLI against Postgres 16; assert the index is used.
 
-**Definition of done for B5:** documents created; parser golden fixtures in CI.
+**Definition of done for B6:** search by text/date/source from the CLI.
 
-Then onward through B15. Build-order dependencies to remember: **B7** ships `search_documents` +
+Then onward through B15. Build-order dependencies to remember: **B7** ships MCP `search_documents` +
 the `audit_log` table + result caps; **B8** adds `source_health` + the freshness job +
 `get_source_health` + the daily digest (`atlas health` / `atlas digest`). `get_source_health`
 must NOT be implemented before B8.
@@ -143,8 +160,32 @@ must NOT be implemented before B8.
 - **`atlas crawl enqueue` is not idempotent across reruns** — the manual dedupe_key is timestamped
   (`fetch:<slug>:manual:<iso>`), so each invocation enqueues a fresh job (intended for a one-shot).
   The scheduler's per-tick dedupe_keys (B-later) are stable.
-- **Single-fetch-worker startup guard (R16/R5) is NOT yet built** — it lands in **B4** with the
-  fetcher (no fetch worker runs until then). `atlas crawl once` (enqueue + RUN) also lands in B4.
+- **SSRF connection-pinning still deferred** (ADR 0014) — the guard validates all resolved IPs and
+  re-validates every redirect hop, but the socket is not pinned to the validated IP, so a sub-second
+  DNS-rebinding TOCTOU window remains. Accepted for a single-operator box; harden before any exposed
+  deployment. (The B5 review independently re-confirmed the IP classification is correct for
+  6to4/NAT64/IPv4-mapped/decimal-literal edges.)
+- **nh3 `<head>` fragment edge** — `strip_html` (nh3) parses fragments in a body context, so bare text
+  placed *directly* inside `<head>` can pass through as inert text (never active content). Not reachable
+  via the B5 RSS path (feedparser hands the parser an extracted content fragment, no `<head>`).
+- **Fetcher decoded-byte cap can overshoot by one decode chunk** — the streamed cap aborts as soon as
+  the running decoded total exceeds `max_bytes`, so peak memory is bounded to ~cap + one chunk, not
+  exactly the cap. Acceptable; a tighter raw-stream bound is a possible later hardening.
+- **Null-URL document re-parse over-inserts** — a link-less item whose body changes on re-parse can't
+  be matched to its prior row (dedupe is by content-hash incl. the GUID) and inserts a new row. Real
+  feed items almost always carry a link (so they dedupe on `canonical_url`); documented in
+  `storage/documents.py`.
+- **Any feed change re-parses all of that feed's items** — the parse `dedupe_key` includes the whole
+  raw feed's `content_hash`, so when any item changes, every item gets a fresh (idempotent, cheap)
+  parse job. Correct, slightly wasteful; a per-item content key is a possible later refinement.
+- **Local security-tooling quirks (pre-existing, CI-version-dependent; NOT B5 regressions).**
+  - `pip-audit --strict` errors locally on the self-package `atlascore (0.0.0)` (not on PyPI) — a
+    local-build artifact (identical on the B4 commit); nh3 and all third-party deps audit clean. CI
+    installs the workspace package editable, which pip-audit skips.
+  - A newer local `detect-secrets` flags the `hashed_secret` hex strings *inside* `.secrets.baseline`
+    itself (same on the pristine B4 tree); the committed baseline was generated by a version that
+    excludes itself, and no B5 source file appears in any finding. The committed `.secrets.baseline`
+    is unchanged from HEAD. A future session should pin `detect-secrets` in CI to remove the drift.
 
 ---
 

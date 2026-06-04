@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Sample Press Releases</title>
+    <link>https://example.test/press</link>
+    <description>Fabricated fixture feed (no real data) for the article-parser golden test.</description>
+    <item>
+      <title>Policy statement &amp; rate decision</title>
+      <link>https://example.test/press/a</link>
+      <guid>https://example.test/press/a</guid>
+      <pubDate>Tue, 03 Jun 2026 18:00:00 GMT</pubDate>
+      <content:encoded><![CDATA[<p>The committee <strong>decided</strong> to hold rates steady.</p><script>steal()</script><p>Read more &raquo;</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>Speech on financial stability</title>
+      <link>https://example.test/press/b</link>
+      <guid>https://example.test/press/b</guid>
+      <pubDate>Wed, 04 Jun 2026 14:30:00 GMT</pubDate>
+      <description>Remarks on the economic outlook and the path of policy.</description>
+    </item>
+  </channel>
+</rss>
