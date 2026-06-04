@@ -20,11 +20,33 @@ worker**, the **B6 full-text search query path + `atlas search` CLI**, the **B7 
 (`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**, the **B9 macro
 time-series (`time_series_point` + FRED connector + `get_macro_series`)**, the **B10 SEC EDGAR
 + NVD document connectors**, the **B11 enrichment subsystem (language → NER → topics →
-embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**, and the **B12 summaries
-pipeline (`summary` table + content-hash cache + `get_document_summary`)**. The MVP continues at
-block **B13**.
+embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**, the **B12 summaries
+pipeline (`summary` table + content-hash cache + `get_document_summary`)**, and the **B13 alert
+subsystem (`alert` table + four rule-based alerts + delivery + `get_alerts`)**. The MVP continues at
+block **B14**.
 
 ### Added
+
+- **B13 — rule-based alerts + delivery + `get_alerts`** ([ADR 0023](docs/decisions/0023-b13-rule-based-alerts-delivery-and-get-alerts.md)).
+  - **`alert` table** (migration `0009`, normal `op.create_table` — autogenerate/drift-checked):
+    `alert_type`, `rule_id`, `severity`, `status (open|acknowledged|resolved|purged)`, `title`,
+    `dedupe_key` (**unique**), `evidence_doc_ids text[]`, `detail` jsonb (sanitized before write),
+    `delivered_at`/`delivery_status`, with `btree(status, severity, created_at)`.
+  - **Four rule-based alerts** (`atlascore.alerts.rules`), idempotent on a deterministic
+    `dedupe_key` (re-evaluation never double-fires): `sec_filing` + `cve_watch` (scan `document`s by
+    source category, cite the doc in `evidence_doc_ids`), `macro_release` (latest FRED observation
+    per series, evidence in `detail`), and `freshness` (stale/error/cooling_down `source_health` —
+    closes the B8/§17 seam).
+  - **Delivery channel** (`atlascore.alerts.delivery`): one configured channel —
+    `ALERT_WEBHOOK_URL` → webhook, else `NTFY_TOPIC` → ntfy, else SMTP, else a stdout/log fallback.
+    **This also wires `atlas digest`** (B8's stdout-only seam) — the digest now goes over the same
+    channel.
+  - **Alert worker + CLI** (`atlascore.worker.alerts`, `atlas alerts run`): evaluate rules
+    (idempotent upsert) → deliver pending alerts (record `delivered_at`/`delivery_status`).
+    Control-plane, MCP-independent.
+  - **`get_alerts` MCP tool** (docs/mcp §2.6): read-only, capped (≤100), audited; filters by
+    `alert_types`/`status` (default open+acknowledged)/`min_severity` (info<low<medium<high<critical)
+    /`since`; resolves `evidence_doc_ids` to document/source provenance.
 
 - **B12 — summaries pipeline + cited summaries** ([ADR 0022](docs/decisions/0022-b12-summaries-pipeline-and-content-hash-cache.md)).
   - **`summary` table** (migration `0008`, raw SQL): R4 content-hash cache keyed

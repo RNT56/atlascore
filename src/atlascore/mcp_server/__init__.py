@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from atlascore.mcp_server.server import (
+    ALERTS_LIMIT_DEFAULT,
+    ALERTS_LIMIT_MAX,
     HEALTH_LIMIT_DEFAULT,
     HEALTH_LIMIT_MAX,
     MACRO_LIMIT_DEFAULT,
@@ -12,6 +14,7 @@ from atlascore.mcp_server.server import (
     SEARCH_LIMIT_DEFAULT,
     SEARCH_LIMIT_MAX,
     SUMMARY_DOCS_MAX,
+    TOOL_GET_ALERTS,
     TOOL_GET_DOCUMENT_SUMMARY,
     TOOL_GET_ENTITY_MENTIONS,
     TOOL_GET_MACRO_SERIES,
@@ -21,6 +24,8 @@ from atlascore.mcp_server.server import (
 )
 
 __all__ = [
+    "ALERTS_LIMIT_DEFAULT",
+    "ALERTS_LIMIT_MAX",
     "HEALTH_LIMIT_DEFAULT",
     "HEALTH_LIMIT_MAX",
     "MACRO_LIMIT_DEFAULT",
@@ -30,6 +35,7 @@ __all__ = [
     "SEARCH_LIMIT_DEFAULT",
     "SEARCH_LIMIT_MAX",
     "SUMMARY_DOCS_MAX",
+    "TOOL_GET_ALERTS",
     "TOOL_GET_DOCUMENT_SUMMARY",
     "TOOL_GET_ENTITY_MENTIONS",
     "TOOL_GET_MACRO_SERIES",

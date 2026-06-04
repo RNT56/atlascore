@@ -8,7 +8,30 @@
 
 ## Current phase
 
-**Block B12 — DONE (2026-06-04). Next: B13.**
+**Block B13 — DONE (2026-06-04). Next: B14.**
+
+**Rule-based alerts fire with dedupe + evidence and are queryable via MCP.** Migration `0009` adds
+the `alert` table (a **normal** `op.create_table` table — autogenerate/drift-checked, unlike the
+raw-SQL enrichment/summary tables): `dedupe_key` (unique), `evidence_doc_ids text[]`, `detail` jsonb
+(sanitized before write), `btree(status, severity, created_at)`. Four rules (`atlascore.alerts.rules`)
+are evaluated idempotently (a deterministic `dedupe_key` ⇒ re-evaluation never double-fires):
+`sec_filing` + `cve_watch` scan `document`s by source category and cite the document in
+`evidence_doc_ids`; `macro_release` fires on the latest FRED observation per series; `freshness`
+fires on stale/error `source_health` (closing the B8/§17 seam). One configured **delivery channel**
+(`ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP, else stdout/log) sends alerts **and now backs `atlas digest`**
+(closing B8's stdout-only seam). `atlas alerts run` evaluates + delivers (control-plane,
+MCP-independent); the read-only **`get_alerts`** MCP tool filters by type/status/`min_severity`/`since`,
+caps at 100, resolves evidence→provenance, and is audited
+([ADR 0023](decisions/0023-b13-rule-based-alerts-delivery-and-get-alerts.md)). **Done-when met:**
+each alert fires with dedupe + `evidence_doc_ids` and is queryable via MCP — verified live (4 rules
+fire, idempotent re-run creates 0, LogChannel delivery, `get_alerts` + min_severity/type filters).
+**281 tests pass**; ruff/mypy clean; migration `0009` applies + drift-check empty on live PG16.
+
+---
+
+### Prior phases
+
+**Block B12 — DONE (2026-06-04).**
 
 **Cached, cited document summaries are queryable via MCP.** Migration `0008` adds the `summary`
 table (R4 content-hash cache keyed `unique(source_hash, model_name, model_version, prompt_version)`
@@ -28,10 +51,6 @@ by `LLM_BACKEND`/`allow_compute`)
 cached, cited summary via MCP, no re-summarization of an identical tuple — verified live (compute →
 cache hit, single/multi scope, content-change bust, cache-only null+reason). **271 tests pass**;
 ruff/mypy clean; migration `0008` applies + drift-check empty on live PG16.
-
----
-
-### Prior phases
 
 **Block B11 — DONE (2026-06-04).**
 
@@ -278,48 +297,55 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-*(none)* — B12 closed. B13 not yet claimed.
+*(none)* — B13 closed. B14 not yet claimed.
 
 ---
 
 ## Next
 
-**B13 — Three rule-based alerts (`macro_release` [FRED], `cve_watch` [NVD + vendor RSS],
-`sec_filing` [EDGAR]) + delivery (webhook/ntfy/email) + `get_alerts`.**
+**B14 — Backups + restore drill + `atlas purge` (erasure incl. raw + full cascade R3, incl. the
+multi-doc summary).**
 
-B12 added cached summaries. B13 adds the alert subsystem (CLAUDE.md §11.10 `alert`, §13 `get_alerts`):
+B13 completed the read surfaces. B14 adds backup/restore + the audited erasure path (CLAUDE.md §16
+R3, §12, runbooks):
 
-1. **`alert` table** (docs/schemas §2.10) — `alert_type (macro_release|cve_watch|sec_filing|…)`,
-   `rule_id`, `severity`, `status (open|acknowledged|resolved|purged)`, `title`, `dedupe_key`
-   (unique), `evidence_doc_ids text[]`, `detail` jsonb, `delivered_at`, `delivery_status`. New
-   migration. Lifecycle `open → acknowledged → resolved`; `purged` when all evidence erased (R3).
-2. **Three rule-based alert rules** (`atlascore.alerts.rules`) evaluated by a `job_type=alert` job:
-   `macro_release` (a new FRED observation), `cve_watch` (a new NVD CVE / vendor-RSS advisory),
-   `sec_filing` (a new EDGAR filing). Each fires with a deterministic `dedupe_key` + `evidence_doc_ids`
-   and is idempotent (re-eval never double-fires).
-3. **Delivery** (`atlascore.alerts.delivery`) — webhook / ntfy / SMTP from `.env`
-   (`ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP). **This wires the real digest channel** (B8's digest is
-   stdout-only) and the **freshness alert** (B8 left a seam).
-4. **`get_alerts`** MCP tool (docs/mcp §2.6) — recent alerts + `evidence_doc_ids`, read-only,
-   capped, audited.
-5. **`atlas alerts run`** CLI (control-plane) to evaluate rules + deliver.
+1. **Backups** (`infra/backup.sh`, `atlas backup`) — nightly `pg_dump` + `rclone`/`rsync` of the
+   raw store offsite; **a tested restore drill** (restore into a scratch DB + raw dir, verify).
+2. **`atlas purge <doc_id|entity_id>`** — the audited erasure path (the **one** exception to raw
+   immutability). Given a `doc_id`, the **full R3 cascade**: delete `embedding` + `mention` rows;
+   delete every `summary` where `document_id = doc_id` **OR** `doc_id = ANY(member_doc_ids)`
+   (the multi-doc-summary case — `document_id` is null there, so the `GIN(member_doc_ids)` scan is
+   load-bearing); remove from FTS (drop the `document` row); delete the `raw_document` file + row;
+   scan `alert.evidence_doc_ids[]` and remove the id (an alert losing ALL evidence ⇒
+   `status=purged`); write a **RETAINED** `audit_log` entry (`retention_class='purge'`) recording
+   action + hashes (never the personal data). Given an `entity_id`: delete the `entity` + its
+   `mention`s; documents survive. Purge is idempotent.
+3. **A purge regression test MUST cover a multi-doc summary** (R3) — the load-bearing case.
 
-**Definition of done for B13:** each alert fires with dedupe + `evidence_doc_ids` and is queryable
-via MCP.
+**Definition of done for B14:** restore verified; purge works and is audited.
 
-Build-order reminders: B14 backups + restore drill + `atlas purge` (the R3 cascade now spans
-`embedding`/`mention`/`entity` (B11) + `summary` (B12, incl. the multi-doc summary regression) +
-`alert.evidence_doc_ids` (B13)); B15 hardening + README + end-to-end smoke/demo. Still pending: the
-**scheduler** block (timed `freshness`/`alert` jobs + the daily FRED/EDGAR/NVD fetches + the
-fetch→parse→enrich worker loop + single-scheduler liveness), `time_series_point` **yearly
-partitions**, SEC full-filing (Tika) + NVD keyed tier, a **real embedding backend**
-(sentence-transformers/cloud), and a **real LLM summary backend** (`LLM_BACKEND=api` + spend-cap
-enforcement) to replace the deterministic baselines.
+Build-order reminders: B15 hardening — security regressions (SSRF / sanitizer / secrets-in-logs +
+columns / prompt-injection) + README + end-to-end smoke/demo (source → ingest → search → MCP summary
+→ alert, unattended, with backups). Still pending after the MVP: the **scheduler** block (timed
+`freshness`/`alert` jobs + daily FRED/EDGAR/NVD fetches + the fetch→parse→enrich worker loop +
+single-scheduler liveness), `time_series_point` **yearly partitions**, SEC full-filing (Tika) + NVD
+keyed tier, a **real embedding backend** (sentence-transformers/cloud), a **real LLM summary backend**
+(`LLM_BACKEND=api` + spend-cap enforcement), and an alert **watchlist** + lifecycle CLI
+(acknowledge/resolve).
 
 ---
 
 ## Known issues
 
+- **B13 alerts fire on every matching item — no watchlist yet (by design; ADR 0023).** The
+  `sec_filing`/`cve_watch` rules alert on **every** filing/CVE in the scan window (not just watched
+  issuers / critical CVSS); a per-issuer/CVSS watchlist (the spec's `nvd_critical_watch` flavour) is
+  a later refinement. `macro_release`/`freshness` carry their evidence in `detail` (empty
+  `evidence_doc_ids` — they have no backing document). The `freshness` dedupe is per
+  `(source, status)`, so a flap back into the same status won't re-alert until the row is pruned.
+  Alert **lifecycle** transitions (acknowledge/resolve) have no CLI yet, and delivery is
+  fire-and-record (a failed send stays undelivered for the next run; no backoff). `atlas alerts run`
+  drives evaluation; the timed `job_type=alert` lands with the scheduler block.
 - **B12 summary backend is a deterministic extractive baseline (by design; ADR 0022).** The
   `local` backend (`ExtractiveSummarizer`) takes each document's leading sentence(s) and cites them
   to the internal doc id — useful and honest, but **not an abstractive narrative** until a real
@@ -395,9 +421,9 @@ enforcement) to replace the deterministic baselines.
   runs the timed `job_type=freshness` job and the CLI can become a pure read. Documented in ADR 0018.
 - **`source_health.duplicate_rate` is null in MVP (B8)** — per-item dedupe outcomes aren't recorded
   yet, so the column is honestly null rather than fabricated; populated when B13 adds the metric.
-- **Digest delivery is stdout-only (B8)** — `atlas digest` prints/logs the digest; the real
-  `ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP channel and the freshness **alert** are wired in B13. The
-  digest **text** (`build_digest`) is final, so B13 only swaps the transport.
+- **Digest delivery — RESOLVED in B13.** `atlas digest` now emits over the configured delivery
+  channel (`ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP, else stdout/log) and is still echoed locally; the
+  freshness **alert** rule is also wired (B13). (Originally a B8 stdout-only seam.)
 - **Scheduler-liveness half of the digest is a placeholder (B8)** — only fetch-worker presence is
   checked (via `pg_locks` on the fetch advisory lock); the single-scheduler liveness check lands
   with the scheduler block.

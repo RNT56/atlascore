@@ -651,6 +651,8 @@ CREATE TABLE alert (
 CREATE INDEX alert_status_idx ON alert (status, severity, created_at);
 ```
 
+> **Implemented (B13) — migration `0009`** ([ADR 0023](../decisions/0023-b13-rule-based-alerts-delivery-and-get-alerts.md)). A **normal** table (`op.create_table`, autogenerate/drift-checked — unlike the raw-SQL enrichment/summary tables). `storage.alerts.upsert_alert` inserts idempotently on `dedupe_key` (`ON CONFLICT DO NOTHING`) with `detail` sanitized via `sanitize_for_storage`; `list_alerts` powers `get_alerts` (status/type/`min_severity`/`since` filters + batched evidence→document/source resolution). Four rules (`alerts.rules`): `sec_filing`/`cve_watch` (by source category, cite the document), `macro_release` (latest FRED observation per series), `freshness` (stale/error `source_health`). The alert worker (`atlas alerts run`) evaluates + delivers over the configured channel (which also backs `atlas digest`). MVP fires on every matching item (no per-issuer/CVSS watchlist yet).
+
 ---
 
 ### 2.11 audit_log

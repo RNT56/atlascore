@@ -475,6 +475,8 @@ When no summary exists and none can be produced:
 
 **Safety notes.** Read-only — cannot create, acknowledge, resolve, or deliver alerts (those are CLI/pipeline operations). Every alert cites its `evidence_doc_ids` so the agent can pull the underlying evidence via `search_documents` / `get_document_summary`. A `purged` alert is returned with empty evidence and no leaked personal data (purge cascade, §3.3). Audited as `tool_name=get_alerts`.
 
+> **Implemented (B13) — `atlascore.mcp_server` + migration `0009`** ([ADR 0023](../decisions/0023-b13-rule-based-alerts-delivery-and-get-alerts.md)). Read-only, capped (≤**100**, default 50), audited. Inputs: `alert_types` (the three content types **plus `freshness`**, a documented superset), `status` (default `open`+`acknowledged`), `min_severity` (ordered `info<low<medium<high<critical`), `since`. Resolves `evidence_doc_ids` to a document/source provenance bundle (a purged doc drops out). The **producing** pipeline (`atlas alerts run` → `worker.alerts`) is control-plane and never runs in MCP (§3). MVP rules: `sec_filing`/`cve_watch` (by source category, cite the document), `macro_release` (latest FRED observation per series, evidence in `detail`), `freshness` (stale/error `source_health`). Delivery is one configured channel (`ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP, else stdout/log) which also backs `atlas digest`.
+
 ---
 
 ### 2.7 `get_raw_document`

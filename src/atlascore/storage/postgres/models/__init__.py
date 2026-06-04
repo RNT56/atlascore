@@ -5,6 +5,7 @@ here as their blocks land (B3: crawl_job/raw_document, B5: document, ...).
 
 from __future__ import annotations
 
+from atlascore.storage.postgres.models.alert import Alert
 from atlascore.storage.postgres.models.audit_log import AuditLog
 from atlascore.storage.postgres.models.crawl_job import CrawlJob
 from atlascore.storage.postgres.models.document import Document
@@ -18,6 +19,7 @@ from atlascore.storage.postgres.models.summary import Summary
 from atlascore.storage.postgres.models.time_series_point import TimeSeriesPoint
 
 __all__ = [
+    "Alert",
     "AuditLog",
     "CrawlJob",
     "Document",

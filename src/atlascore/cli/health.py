@@ -5,9 +5,9 @@ Both are **CLI-driven and MCP-independent** (CLAUDE.md §17, architecture §7): 
 liveness check. `atlas health` prints an on-demand snapshot; `atlas digest` builds the daily
 summary and emits it over the delivery channel.
 
-Delivery seam (B8): the digest is printed to stdout / logged. The real delivery channels
-(`ALERT_WEBHOOK_URL` / `NTFY_TOPIC` / SMTP) are wired in **B13** with the alert pipeline; the
-digest text is produced here so that work only swaps the transport.
+Delivery (B13): the digest text (`build_digest`) is emitted over the same configured channel as
+alerts (`ALERT_WEBHOOK_URL` / `NTFY_TOPIC` / SMTP, else stdout/log) — `atlas digest` now closes the
+B8 stdout-only seam. The digest is always echoed to stdout too (it is an operator-run command).
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Annotated
 import typer
 from sqlalchemy.orm import Session
 
+from atlascore.alerts.delivery import get_delivery_channel
 from atlascore.cli._db import session_or_exit
 from atlascore.core.clock import SystemClock
 from atlascore.core.logging import get_logger
@@ -89,8 +90,18 @@ def build_digest(
 
 
 def deliver_digest(text: str) -> None:
-    """Emit the digest. B8: stdout + structured log. B13 swaps in the webhook/ntfy/email channel."""
+    """Emit the digest over the configured channel (B13) and always echo to stdout.
+
+    A delivery failure is logged but never crashes the operator command — the digest is still
+    printed locally.
+    """
     _log.info("daily_digest", lines=text.count("\n") + 1)
+    channel = get_delivery_channel()
+    try:
+        status = channel.send("AtlasCore daily digest", text)
+        _log.info("digest_delivered", channel=channel.name, status=status)
+    except Exception as exc:  # delivery boundary: still show the digest locally
+        _log.warning("digest_delivery_failed", channel=channel.name, error=str(exc))
     typer.echo(text)
 
 
