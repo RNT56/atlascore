@@ -101,8 +101,13 @@ jobs:
           enable-cache: true
       - name: Install project (locked)
         run: uv sync --frozen --all-extras
-      - name: pip-audit (vulnerability scan of locked deps)
-        run: uv run pip-audit --strict
+      - name: pip-audit (vulnerability scan of locked third-party deps)
+        # Audit the locked third-party deps. The workspace package `atlascore` is not on
+        # PyPI, so `--no-emit-project` excludes it (else `--strict` fails trying to look it
+        # up). Real CVEs in any dependency still fail the build.
+        run: |
+          uv export --frozen --no-emit-project --format requirements-txt > /tmp/requirements-audit.txt
+          uv run pip-audit --strict --requirement /tmp/requirements-audit.txt
 
   migrations:
     name: alembic migration check
