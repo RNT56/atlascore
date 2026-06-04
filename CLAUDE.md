@@ -260,6 +260,7 @@ atlas crawl enqueue <source_id>             # enqueue a fetch crawl_job for a fe
 atlas crawl dlq                              # inspect the dead-letter queue (B3)
 atlas crawl once <source_id>                # enqueue + RUN one crawl job (needs the worker/connector — B4)
 atlas parse <raw_id>                         # (re)parse a raw document
+atlas search "<query>" [--source <slug>] [--since <date>] [--until <date>] [--limit N]   # FTS over documents; sanitized snippet + provenance (B6)
 atlas enrich <doc_id>                        # run enrichment for a document
 atlas alerts run                             # evaluate alert rules
 atlas health                                 # source_health + crawl_job DLQ depth + worker/scheduler liveness

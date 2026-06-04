@@ -14,8 +14,9 @@ This entry covers the planning + documentation scaffold, the **B1 skeleton** (th
 package, the Alembic harness, and the `source` schema), the **B2 source registry** (canonical YAML,
 default-deny, and the `atlas source` CLI), and the **B3 raw store + job queue** (content-addressed
 raw storage, the `crawl_job` queue, and `sanitize_for_storage`), the **B4 RSS connector +
-SSRF-guarded fetcher + worker**, and the **B5 article parser + canonical `document` + parse
-worker**. The MVP continues at block **B6**.
+SSRF-guarded fetcher + worker**, the **B5 article parser + canonical `document` + parse
+worker**, and the **B6 full-text search query path + `atlas search` CLI**. The MVP continues
+at block **B7**.
 
 ### Added
 
@@ -209,5 +210,24 @@ workflow-config bugs from B1 (never exercised while the repo was empty), both fi
 
 CI is green on all 8 jobs (lint-format, typecheck, test, audit, migrations, source-yaml,
 secrets-scan, integration).
+
+### Added — B6 (full-text search query path + `atlas search` CLI)
+
+- **`atlas search "<query>"`** — full-text search over canonical documents:
+  `[--source <slug>] [--since <date>] [--until <date>] [--limit N]`. Prints ranked, **sanitized**
+  `body_text` snippets (matched terms wrapped in `«…»`) with provenance — source, canonical URL,
+  published date, document id, and rank. `--since`/`--until` are UTC date bounds (since inclusive,
+  until exclusive); `--limit` defaults to 20 and clamps to 100.
+- **`atlascore.storage.search.search_documents`** — the FTS query over `document`: matches the
+  `ix_document_fts` GIN index (B5 migration `0003`) using the *identical* `to_tsvector('simple',
+  coalesce(body_text, ''))` expression so the index is used; parses input with
+  `websearch_to_tsquery('simple', …)` (robust to arbitrary input; supports quoted phrases / `or` /
+  `-term`); ranks by `ts_rank`; returns a capped, provenance-bearing `SearchHit` list. The SQL is
+  static and fully parameterized (optional filters are `CAST(:p AS …) IS NULL OR …` guards) — no
+  injection surface ([ADR 0016](docs/decisions/0016-b6-fts-query-path-and-search-contract.md)).
+- **Tests** — an integration test (text match + ranking, source/since/until filters, result cap,
+  snippet + provenance, and an `EXPLAIN`-with-`enable_seqscan=off` regression asserting
+  `ix_document_fts` is used) and unit tests for the CLI (help, clean exit without a DB, malformed
+  `--since` rejection, UTC date normalization).
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

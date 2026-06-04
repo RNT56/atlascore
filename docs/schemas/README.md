@@ -322,6 +322,19 @@ CREATE INDEX document_cluster_idx    ON document (cluster_id);
 > enrichment-owned columns (`topics`/`entity_ids`/`cluster_id`) untouched. Null-`canonical_url`
 > docs dedupe best-effort on `(source_id, raw_document_id, content_hash)`.
 
+> **Search query path (B6) — `atlascore.storage.search.search_documents` + `atlas search`.**
+> The FTS query reuses `ix_document_fts` by matching its expression *exactly*
+> (`to_tsvector('simple', coalesce(body_text,'')) @@ websearch_to_tsquery('simple', :q)`); the
+> `'simple'` config is load-bearing and must stay in lockstep with the index (changing it requires
+> a reindex). `websearch_to_tsquery` is used so arbitrary input never raises (supports quoted
+> phrases / `or` / `-term`). Results rank by `ts_rank` (tie-broken `published_at DESC NULLS LAST`),
+> carry a `ts_headline` snippet (matches in `«…»`) + provenance, and are capped (`MAX_LIMIT=100`).
+> Optional `source`/`since`/`until` filters are bound parameters guarded by
+> `CAST(:p AS …) IS NULL OR …`, so the SQL is static with no injection surface. Only sanitized
+> `body_text` is searched/returned — never raw HTML (§13). An `EXPLAIN`-with-seqscan-off
+> integration test asserts the index is used. This is the contract B7's MCP `search_documents`
+> reuses ([ADR 0016](../decisions/0016-b6-fts-query-path-and-search-contract.md)).
+
 ---
 
 ### 2.5 summary

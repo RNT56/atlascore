@@ -8,7 +8,26 @@
 
 ## Current phase
 
-**Block B5 — DONE (2026-06-04). Next: B6.**
+**Block B6 — DONE (2026-06-04). Next: B7.**
+
+The Postgres FTS **query path** + `atlas search` CLI are in place (the `ix_document_fts` index
+itself shipped in B5's migration `0003`). `atlascore.storage.search.search_documents` matches the
+index expression exactly (`to_tsvector('simple', coalesce(body_text,'')) @@
+websearch_to_tsquery('simple', :q)`), ranks by `ts_rank`, returns a `ts_headline` snippet (`«…»`
+markers) + provenance (source, canonical URL, published date, doc id, rank), filters by source
+slug / `--since` / `--until`, and caps results (`MAX_LIMIT=100`). The SQL is static + fully
+parameterized (filters via `CAST(:p AS …) IS NULL OR …`) — no injection surface
+([ADR 0016](decisions/0016-b6-fts-query-path-and-search-contract.md)). **Done-when met:** search
+by text / date / source from the CLI, verified live against Postgres 16; an
+`EXPLAIN`-with-`enable_seqscan=off` regression asserts `ix_document_fts` is actually used. **199
+tests pass** (unit + contract + integration on a live DB); ruff/mypy clean; autogenerate
+drift-check empty (no schema change in B6).
+
+---
+
+### Prior phase
+
+**Block B5 — DONE (2026-06-04).**
 
 The article parser + canonical `document` + parse worker are in place. Migration `0003` creates the
 `document` table (docs/schemas §2.4) with its partial-unique `canonical_url`, FTS `tsvector` GIN, and
@@ -120,35 +139,50 @@ until the current set runs unattended for a month before adding sources or servi
     independently re-audited (6to4/NAT64/IPv4-mapped/decimal-literal all correctly blocked).
   - New tests: sanitizer (+ adversarial regressions), article-parser golden, document upsert,
     full B4→B5 chain (+ same-GUID-edit and null-URL-collapse regressions). 194 pass total.
+- **B6 — full-text search query path + `atlas search` CLI (2026-06-04).**
+  - `atlascore.storage.search.search_documents` + `SearchHit`: FTS over `document` that matches the
+    B5 `ix_document_fts` index expression exactly (`'simple'` config in lockstep), parses input with
+    `websearch_to_tsquery` (robust to arbitrary input), ranks by `ts_rank`, returns a `ts_headline`
+    snippet (`«…»`) + provenance, filters by source slug / `since` / `until`, and clamps to
+    `MAX_LIMIT=100`. Static, fully parameterized SQL (filters via `CAST(:p AS …) IS NULL OR …`).
+  - `atlas search "<query>" [--source][--since][--until][--limit]` CLI (registered in `cli/main.py`).
+  - [ADR 0016](decisions/0016-b6-fts-query-path-and-search-contract.md) records the query contract
+    that B7's MCP `search_documents` reuses. Tests: 1 integration (match/rank, filters, cap, snippet,
+    provenance, `EXPLAIN`-seqscan-off index-usage regression) + 4 unit (CLI). 199 pass total.
 
 ---
 
 ## In progress
 
-*(none)* — B5 closed (incl. the deferred B4 adversarial SSRF review). B6 not yet claimed.
+*(none)* — B6 closed. B7 not yet claimed.
 
 ---
 
 ## Next
 
-**B6 — Postgres FTS index + CLI search.**
+**B7 — MCP server + `search_documents` + `audit_log` table + result caps.**
 
-The FTS index itself (`ix_document_fts`, `gin(to_tsvector('simple', coalesce(body_text,'')))`) already
-ships in migration `0003` (B5) per docs/schemas §2.4, so B6 focuses on the **query path**:
+B6 settled the FTS query contract (ADR 0016); B7 exposes it to agents over MCP and adds the audit
+trail:
 
-1. A search query over `document` (FTS `tsvector` match on `body_text`, ranked via `ts_rank`), with
-   filters for date range and source, and a result cap. Use the `'simple'` text-search config to
-   match the index (else the index won't be used).
-2. `atlas search "<query>" [--source <slug>] [--since <date>] [--limit N]` CLI returning sanitized
-   `body_text` snippet + provenance (title, canonical_url, source, published_at).
-3. Tests: search by text/date/source from the CLI against Postgres 16; assert the index is used.
+1. The **`audit_log` table** (docs/schemas §2.11) — append-only; `id, ts, action, actor, tool_name,
+   source_id, target_ref, detail jsonb, retention_class (default routine)`; `detail` sanitized via
+   `sanitize_for_storage` before write (B3 helper); indexes `btree(ts)`, `btree(action)`. New
+   migration `0004` + ORM model + `DocumentRecord`-style Pydantic schema.
+2. The **MCP server** (`atlascore.mcp_server`, FastMCP over **stdio**) exposing **`search_documents`**
+   — wrap `storage.search.search_documents` with a strict input/output schema, return provenance +
+   sanitized text only (never raw HTML), enforce the same result cap (`MAX_LIMIT`), and write an
+   `audit_log` entry per call (`actor=mcp`, `tool_name=search_documents`).
+3. `atlas mcp dev` to run the server over stdio for development.
+4. Tests: an agent query returns cited results over stdio; the audit entry is written and sanitized.
 
-**Definition of done for B6:** search by text/date/source from the CLI.
+**Definition of done for B7:** an agent answers with citations over stdio; the call is audited.
 
-Then onward through B15. Build-order dependencies to remember: **B7** ships MCP `search_documents` +
-the `audit_log` table + result caps; **B8** adds `source_health` + the freshness job +
-`get_source_health` + the daily digest (`atlas health` / `atlas digest`). `get_source_health`
-must NOT be implemented before B8.
+Build-order dependencies to remember (R10): **B7** creates the `audit_log` table and ships
+`search_documents` + result caps; **`get_source_health`, the `source_health` table, and the
+freshness job land in B8** — do NOT implement `get_source_health` before B8 (it reads
+`source_health`, which doesn't exist until then). B8 also adds the daily digest +
+`atlas health` / `atlas digest`. Then onward through B15.
 
 ---
 

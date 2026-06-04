@@ -36,6 +36,7 @@ deep-dive instead.
 | [0013](0013-source-registry-on-disk-and-slug-round-trip.md) | Source registry in `sources/`; YAML slug round-trips in `config`; B2 adds `source sync`/`list` | Accepted | 2026-06-03 | — (B2 registry) |
 | [0014](0014-ssrf-validate-all-ips-pin-deferred.md) | SSRF guard validates all resolved IPs + re-validates redirects; connection-pinning deferred | Accepted | 2026-06-03 | — (B4 SSRF/§14) |
 | [0015](0015-b5-parse-pipeline-and-nh3-sanitizer.md) | B5 parse pipeline: network-free parse, last-write-wins `document` upsert, nh3 HTML sanitizer | Accepted | 2026-06-04 | R2 (B5 parser/§2.4/§14) |
+| [0016](0016-b6-fts-query-path-and-search-contract.md) | B6 full-text search: `'simple'`-config FTS over `document`, `websearch_to_tsquery` + `ts_rank`, static parameterized SQL, index-usage regression | Accepted | 2026-06-04 | — (B6 search/§2.4/§13/§15) |
 
 > ADRs 0001–0011 encode the canonical-spec resolutions R1–R8 plus the naming and
 > MCP-surface decisions: R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008,
