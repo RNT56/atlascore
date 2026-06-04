@@ -49,8 +49,17 @@ _MANUAL_INDEXES = frozenset(
 def _include_object(
     obj: object, name: str | None, type_: str, reflected: bool, compare_to: object
 ) -> bool:
-    """Skip manually-managed expression/partial indexes during autogenerate."""
-    return not (type_ == "index" and name in _MANUAL_INDEXES)
+    """Skip manually-managed objects during autogenerate.
+
+    - The expression/partial/GIN indexes created via raw SQL (migration 0003).
+    - The whole ``time_series_point`` partitioned table and everything named after it (the
+      parent, the ``_default`` partition, its index and constraints) — created via raw SQL in
+      migration 0006 because autogenerate cannot emit ``PARTITION BY`` (the ORM model maps the
+      columns for querying only).
+    """
+    if type_ == "index" and name in _MANUAL_INDEXES:
+        return False
+    return not (name is not None and name.startswith("time_series_point"))
 
 
 def run_migrations_offline() -> None:

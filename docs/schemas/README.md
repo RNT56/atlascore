@@ -503,6 +503,8 @@ CREATE INDEX tsp_provider_series_ts_idx ON time_series_point (provider, series_i
 --   UNIQUE (provider, series_id, ts, vintage_key)
 ```
 
+> **Implemented (B9) — migration `0006`, the first partitioned table** ([ADR 0019](../decisions/0019-b9-time-series-fred-connector-and-macro-series.md)). Created via **raw SQL** (autogenerate cannot emit `PARTITION BY`): parent `PARTITION BY RANGE (ts)`, composite PK `(id, ts)`, `kind` CHECK, and `CONSTRAINT time_series_point_natural_key UNIQUE NULLS NOT DISTINCT (provider, series_id, ts, vintage)`. A **DEFAULT partition** (`time_series_point_default`) catches every `ts` for the MVP; yearly partitions are a documented later refinement. All `time_series_point*` objects are **excluded from the autogenerate drift-check** by a name-prefix rule in `migrations/env.py` (the ORM model maps columns for querying only). `storage.timeseries.upsert_observations` upserts idempotently on the natural key (`ON CONFLICT … DO UPDATE`); `read_macro_series` powers `get_macro_series`. **The composite-PK rule applies to any future partitioned table.**
+
 ---
 
 ### 2.8 entity

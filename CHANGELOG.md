@@ -16,9 +16,10 @@ default-deny, and the `atlas source` CLI), and the **B3 raw store + job queue** 
 raw storage, the `crawl_job` queue, and `sanitize_for_storage`), the **B4 RSS connector +
 SSRF-guarded fetcher + worker**, the **B5 article parser + canonical `document` + parse
 worker**, the **B6 full-text search query path + `atlas search` CLI**, the **B7 MCP server
-+ `search_documents` + `audit_log` table**, and the **B8 freshness/health subsystem
-(`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**. The MVP continues
-at block **B9**.
++ `search_documents` + `audit_log` table**, the **B8 freshness/health subsystem
+(`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**, and the **B9 macro
+time-series (`time_series_point` + FRED connector + `get_macro_series`)**. The MVP continues at
+block **B10**.
 
 ### Added
 
@@ -254,6 +255,33 @@ secrets-scan, integration).
   secret embedded in the query is redacted in `audit_log.detail`; caps + validation hold) and unit
   tests (CLI help, offline server build + tool contract, hit→payload mapping). Verified end-to-end
   over real stdio with an MCP client driving `atlas mcp dev`.
+
+### Added — B9 (macro time-series: `time_series_point` + FRED connector + `get_macro_series`)
+
+- **`time_series_point` table** (migration `0006`) — the first **RANGE-partitioned** table
+  (docs/schemas §2.7): composite PK `(id, ts)`, `UNIQUE NULLS NOT DISTINCT (provider, series_id,
+  ts, vintage)`, a `kind` CHECK, OHLCV columns (nullable), and a DEFAULT partition. Created via raw
+  SQL and excluded from the autogenerate drift-check by a `time_series_point` name-prefix rule.
+- **FRED connector** (`atlascore.connectors.fred.series.FredConnector`) — fetches a series'
+  observations from the free/official FRED API and parses them to `Decimal` values (a FRED `"."`
+  becomes null, never zero-filled). The connector ABC now supports both document and time-series
+  families: `parse_entries` / `parse_observations` default to `NotImplementedError`; `FetchContext`
+  carries connector `params` + the resolved `credential`.
+- **Macro ingest** — the single fetch worker (`run_one_fetch`) dispatches on `access_method`:
+  RSS → documents, **API → `worker.macro`** (fetch → store raw → `storage.timeseries.
+  upsert_observations`, idempotent on the natural key). `atlas crawl once <fred_source>` works.
+- **`params` on the source registry** — `fetch.params` (`dict[str,str]`) carries non-secret
+  connector config (`series_id`, optional `unit`), round-tripping into `source.config`.
+  **`resolve_credential`** resolves a `credential_ref` to its env value at runtime; the FRED
+  `?api_key=…` URL is sanitized before any log/column (the key never reaches `crawl_job`).
+- **`get_macro_series`** MCP tool (third tool) — a series + ordered observations; each `value` is a
+  **string** (preserves `numeric` precision), missing values null, capped (`limit ≤ 2000`), audited;
+  `found=false` + reason for an un-ingested series
+  ([ADR 0019](docs/decisions/0019-b9-time-series-fred-connector-and-macro-series.md)).
+- **FRED source** `sources/fred_cpiaucsl.yaml` (CPI, approved); fixtures + tests — unit (parser
+  golden incl. missing values, fetch contract via respx incl. api-key URL, error cases) and
+  integration (full fetch → `time_series_point` → idempotent re-fetch → `get_macro_series`, audited,
+  api-key-not-leaked). Verified live + over real stdio.
 
 ### Added — B8 (freshness/health: `source_health` + `get_source_health` + digest)
 

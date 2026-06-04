@@ -207,6 +207,8 @@ All tools are read-oriented, stdio-served, schema-validated, capped, audited, an
 
 **Safety notes.** Numeric/structured data; no HTML, no free-text injection surface. `value` is rendered as a string to preserve `numeric` precision (no float rounding). Revisable macro series carry `vintage`; the tool never silently flattens vintages. No invented values — gaps stay absent, not zero-filled. Audited as `tool_name=get_macro_series`.
 
+> **Implemented (B9) — `atlascore.mcp_server` + migration `0006`** ([ADR 0019](../decisions/0019-b9-time-series-fred-connector-and-macro-series.md)). Reads `time_series_point` via `storage.timeseries.read_macro_series`. **Implemented input:** `series_id` (required), `provider` (default `fred`), `start` / `end` (UTC; start inclusive, end exclusive), `limit` (1–**2000**, default 1000). Output: `found`, `provider`, `series_id`, `kind`, `unit`, ordered `points` (`{ts, value (string|null), vintage}`), `count`, `truncated`. An un-ingested series returns `found=false` + a `reason` (never a fabricated value). Audited (`tool_name=get_macro_series`, `target_ref=provider:series_id`). **Deviations** (forward-compatible): the `unit` label is operator-supplied via `fetch.params.unit` (the observations endpoint omits it); `kind` is `observation` only and `vintage` is null in MVP (market `bar`/OHLCV and ALFRED vintaged fetching are later). The FRED api key resolves from env via `credential_ref` and is sanitized out of any log/column.
+
 ---
 
 ### 2.3 `get_entity_mentions`

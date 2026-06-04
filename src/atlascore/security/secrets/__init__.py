@@ -7,6 +7,7 @@ never a value). `sanitize_for_storage` is the single helper every writer of
 
 from __future__ import annotations
 
+from atlascore.security.secrets.credentials import resolve_credential
 from atlascore.security.secrets.sanitize import REDACTED, sanitize_for_storage
 
-__all__ = ["REDACTED", "sanitize_for_storage"]
+__all__ = ["REDACTED", "resolve_credential", "sanitize_for_storage"]

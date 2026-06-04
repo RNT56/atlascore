@@ -8,27 +8,38 @@
 
 ## Current phase
 
-**Block B8 — DONE (2026-06-04). Next: B9.**
+**Block B9 — DONE (2026-06-04). Next: B10.**
 
-The **freshness/health subsystem** is in place. Migration `0005` creates `source_health`
-(docs/schemas §2.12): current snapshot, PK `source_id` (FK RESTRICT), `interval` `freshness_lag`,
-CHECK-bounded `status`, `btree(status)`. `worker/freshness.refresh_source_health` computes
-(read-only over `crawl_job` + `document`) + idempotently upserts each source's health;
-`freshness_lag = now - coalesce(last_item_published_at, last_success_at)`, classified by the pure,
-unit-tested `classify_status` (`cooling_down` > `stale` > `warn` > `error` > `ok`;
-`COOLING_THRESHOLD=3`). `atlas health` / `atlas digest` (control-plane, MCP-independent) recompute
-then read source_health + `crawl_job` DLQ depth + fetch-worker liveness; the digest delivers to
-stdout/log (a seam — B13 wires the real channel). The **`get_source_health`** MCP tool is a
-read-only, **secret-free**, audited, capped (`≤200`) mirror
-([ADR 0018](decisions/0018-b8-source-health-freshness-and-digest.md)). **Done-when met:** a stale
-source appears in `source_health`, in `atlas health` / `atlas digest`, and via `get_source_health`
-— verified live (CLI + real stdio MCP) and by integration tests (stale/fresh/failing
-classification; secret-free + audited tool; digest surfaces the stale source). **219 tests pass**;
-ruff/mypy clean; migration `0005` applies, reverses, drift-check empty.
+The **macro time-series** path is in place. Migration `0006` creates `time_series_point` — the
+**first RANGE-partitioned table** (docs/schemas §2.7): composite PK `(id, ts)`, `UNIQUE NULLS NOT
+DISTINCT (provider, series_id, ts, vintage)`, `kind` CHECK, OHLCV (nullable), a DEFAULT partition;
+created via raw SQL and excluded from the drift-check by a `time_series_point` name-prefix rule.
+The **FRED connector** (`connectors.fred.series`) fetches a series' observations and parses them to
+`Decimal` (a FRED `"."` → null, never zero-filled). The connector ABC now supports both families
+(`parse_entries`/`parse_observations` default-raise); `FetchContext` carries connector `params` +
+the resolved `credential`. The single fetch worker (`run_one_fetch`) dispatches on `access_method`:
+RSS → documents, **API → `worker.macro`** (fetch → store raw → idempotent
+`upsert_observations`). `fetch.params` (e.g. `series_id`/`unit`) round-trips into `source.config`;
+**`resolve_credential`** resolves the FRED api key from env and the `?api_key=…` URL is sanitized
+out of every log/column. The **`get_macro_series`** MCP tool (third tool) returns a series with
+`value` as a string (numeric precision), missing→null, capped `≤2000`, audited
+([ADR 0019](decisions/0019-b9-time-series-fred-connector-and-macro-series.md)). **Done-when met:**
+query a macro series via MCP — verified live (full FRED fetch → `time_series_point` → idempotent
+re-fetch → `get_macro_series`) and over real stdio; the api key provably never reaches `crawl_job`.
+**228 tests pass**; ruff/mypy clean; migration `0006` applies, reverses, drift-check empty.
 
 ---
 
 ### Prior phases
+
+**Block B8 — DONE (2026-06-04).** The **freshness/health subsystem**. Migration `0005` creates
+`source_health` (current snapshot, PK `source_id`, `interval` lag, CHECK status, `btree(status)`).
+`worker/freshness.refresh_source_health` computes + upserts each source's health; the pure
+unit-tested `classify_status` orders `cooling_down` > `stale` > `warn` > `error` > `ok`.
+`atlas health` / `atlas digest` (control-plane) recompute then read source_health + DLQ depth +
+fetch-worker liveness (digest delivers to stdout/log — B13 wires the channel); `get_source_health`
+is a read-only, **secret-free**, audited, capped mirror
+([ADR 0018](decisions/0018-b8-source-health-freshness-and-digest.md)).
 
 **Block B7 — DONE (2026-06-04).** Read-only **MCP server** (FastMCP, stdio) + the **`audit_log`**
 table (migration `0004`; append-only, no FKs, sanitized `detail`). `search_documents` reuses B6's
@@ -189,40 +200,55 @@ until the current set runs unattended for a month before adding sources or servi
   - [ADR 0018](decisions/0018-b8-source-health-freshness-and-digest.md). Tests: 2 unit-files
     (classify matrix, digest render, CLI, offline tool) + 1 integration; verified live + stdio.
     219 pass total.
+- **B9 — FRED connector + `time_series_point` + `get_macro_series` (2026-06-04).**
+  - `time_series_point` (migration `0006`) — first **partitioned** table (RANGE on `ts`, composite
+    PK `(id, ts)`, `UNIQUE NULLS NOT DISTINCT`, DEFAULT partition; raw SQL; drift-check excluded by
+    name prefix). `storage.timeseries` (idempotent `upsert_observations` + `read_macro_series`).
+  - `connectors.fred.series.FredConnector` + the connector ABC made multi-shape
+    (`parse_entries`/`parse_observations` default-raise); `FetchContext` gains `params` +
+    `credential`. `worker.macro` ingest; `run_one_fetch` dispatches RSS vs API by `access_method`.
+  - `fetch.params` (`SourceFetch`/`SourceConfig`) for connector config; `security.secrets.
+    resolve_credential` resolves the FRED key from env; the `?api_key=…` URL is sanitized out of
+    logs/columns.
+  - `get_macro_series` MCP tool (value-as-string, missing→null, capped `≤2000`, audited);
+    `sources/fred_cpiaucsl.yaml`; `.env.example` FRED_API_KEY.
+  - [ADR 0019](decisions/0019-b9-time-series-fred-connector-and-macro-series.md). Tests: unit (FRED
+    parser golden + fetch contract via respx) + 1 integration (full chain, idempotent, audited,
+    key-not-leaked). 228 pass total. Verified live + over real stdio.
 
 ---
 
 ## In progress
 
-*(none)* — B8 closed. B9 not yet claimed.
+*(none)* — B9 closed. B10 not yet claimed.
 
 ---
 
 ## Next
 
-**B9 — FRED connector + `time_series_point` + `get_macro_series`.**
+**B10 — SEC EDGAR (basic) + NVD connectors.**
 
-B8 closed the freshness/health subsystem. B9 adds the first time-series source:
+B9 added the first API connector (FRED) + the connector `params`/credential machinery + the
+access-method dispatch — B10 reuses all of it for two more official/free API sources:
 
-1. The **`time_series_point` table** (docs/schemas §2.7) — **RANGE-partitioned by `ts`** with a
-   **composite PK `(id, ts)`** (the partitioned-table rule), `UNIQUE NULLS NOT DISTINCT (provider,
-   series_id, ts, vintage)` (PG15+), `kind` discriminator (`observation`|`bar`), nullable OHLCV.
-   Migration `0006` + ORM + schema. **First partitioned table — mind the composite-PK invariant.**
-2. The **FRED connector** (`atlascore.connectors.fred`) — API connector via the SDK lifecycle;
-   `credential_ref` names the `FRED_API_KEY` env key (never the value); honor documented rate
-   limits; **the `?api_key=…` URL must be sanitized before any `crawl_job`/`audit` write** (the
-   `sanitize_for_storage` path already strips URL query/userinfo — verify it covers FRED).
-   Fixtures: success/empty/malformed/rate-limit/drift.
-3. **`get_macro_series`** MCP tool (docs/mcp §2.2) — a series + ordered observations; `value` as a
-   string to preserve `numeric` precision; capped (`≤2000`); audited; never zero-fills gaps.
+1. **SEC EDGAR** — honor the **10 req/s** limit and the required transparent User-Agent with a
+   contact (`DEFAULT_USER_AGENT`); filings become `document` rows (a filing parser, or reuse the
+   article/text path) so they are searchable via `search_documents`. `params` carries the CIK /
+   watch target. Robots is policy-input only (no runtime gate; API source).
+2. **NVD** (National Vulnerability Database) — CVEs become `document` rows (searchable); respect the
+   documented rate limits; an API key (if used) resolves via `credential_ref` → env.
+3. Per connector: SDK lifecycle, fixtures (success/empty/malformed/rate-limit/drift), a parser
+   golden test, and a short `docs/connectors/` note. Add `sources/sec_*.yaml` / `sources/nvd_*.yaml`
+   (policy `approved`).
 
-**Definition of done for B9:** query a macro series via MCP.
+**Definition of done for B10:** filings + CVEs are searchable (via `search_documents`).
 
-Build-order reminders: B10 SEC EDGAR + NVD; B11 enrichment + `get_entity_mentions` (also unblocks
-the deferred `search_documents` topic/entity filters); B12 summaries + `get_document_summary`; B13
-the three rule-based alerts + delivery (wires the real digest channel + freshness alerts) +
-`get_alerts`; B14 backups + purge; B15 hardening. The scheduler block (wires the timed
-`job_type=freshness` job + single-scheduler liveness) is still pending.
+Build-order reminders: B11 enrichment + `get_entity_mentions` (also unblocks the deferred
+`search_documents` topic/entity filters); B12 summaries + `get_document_summary`; B13 the three
+rule-based alerts + delivery (wires the real digest channel + freshness alerts) + `get_alerts`; B14
+backups + purge; B15 hardening. Still pending: the **scheduler** block (timed `job_type=freshness` +
+the daily FRED/EDGAR/NVD fetches + single-scheduler liveness), and `time_series_point` **yearly
+partitions** for scale.
 
 ---
 
@@ -278,6 +304,17 @@ the three rule-based alerts + delivery (wires the real digest channel + freshnes
 - **Scheduler-liveness half of the digest is a placeholder (B8)** — only fetch-worker presence is
   checked (via `pg_locks` on the fetch advisory lock); the single-scheduler liveness check lands
   with the scheduler block.
+- **`time_series_point` uses a single DEFAULT partition (B9)** — correct and adequate at
+  single-operator scale, but real RANGE partitioning (yearly) for time-series volume is a documented
+  later refinement (a partition-management runbook). The composite-PK + `NULLS NOT DISTINCT`
+  invariants are already enforced on the parent.
+- **FRED unit label + vintage are limited in MVP (B9)** — the human `unit` label is operator-supplied
+  via `fetch.params.unit` because the observations endpoint omits it (the `/fred/series` metadata
+  fetch is a follow-up); `kind` is `observation` only and `vintage` is null (market `bar`/OHLCV and
+  ALFRED vintaged fetching are later). Documented in ADR 0019.
+- **Macro parse runs inline in the fetch worker (B9)** — unlike the scaled-out RSS parse, a macro
+  series is parsed + upserted inside the (rate-limited, single) fetch worker. Fine for small series;
+  revisit if a high-volume time-series source is added.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
   - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
     creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked

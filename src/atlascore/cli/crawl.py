@@ -26,6 +26,7 @@ from atlascore.storage.postgres.models import Source
 from atlascore.storage.queue import dead_jobs, enqueue
 from atlascore.storage.rawstore import RawStore
 from atlascore.storage.sources import get_source
+from atlascore.worker.macro import MacroFetchResult
 from atlascore.worker.run import FetchJobResult, fetch_worker_lock, run_one_fetch
 
 crawl_app = typer.Typer(
@@ -120,7 +121,7 @@ def once_cmd(
         engine.dispose()
 
 
-def _report_once(name: str, result: FetchJobResult | None) -> None:
+def _report_once(name: str, result: FetchJobResult | MacroFetchResult | None) -> None:
     if result is None:
         typer.secho("no fetch job was available to run", fg=typer.colors.YELLOW, err=True)
         raise typer.Exit(code=1)
@@ -129,6 +130,13 @@ def _report_once(name: str, result: FetchJobResult | None) -> None:
         raise typer.Exit(code=1)
     if result.not_modified:
         typer.secho(f"{name}: not modified (304) — no new raw", fg=typer.colors.GREEN)
+        return
+    if isinstance(result, MacroFetchResult):
+        typer.secho(
+            f"{name}: fetched; raw captured ({result.raw_document_id}); "
+            f"{result.points_written} points upserted ({result.series_id})",
+            fg=typer.colors.GREEN,
+        )
         return
     typer.secho(
         f"{name}: fetched; raw captured ({result.raw_document_id}); "

@@ -322,6 +322,9 @@ fetch:
   connector: atlascore.connectors.sec.companyfacts:SecCompanyFactsConnector
   schedule: "*/15 * * * *"
   timeout_seconds: 30
+  params: {}                         # optional connector-specific, NON-SECRET config
+                                     # (e.g. FRED `{series_id: CPIAUCSL, unit: "..."}`);
+                                     # round-trips into source.config.params. NEVER a secret.
 ```
 
 **Retention** (canonical = structured, per data-class; the old scalar `retention_ref` string is REMOVED everywhere):

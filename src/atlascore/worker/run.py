@@ -16,8 +16,11 @@ import importlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from uuid import UUID
+
+if TYPE_CHECKING:  # annotation-only import (avoids the macro<->run import cycle at runtime)
+    from atlascore.worker.macro import MacroFetchResult
 
 from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
@@ -29,7 +32,8 @@ from atlascore.core.errors import ConfigError, FetchWorkerBusyError, PolicyError
 from atlascore.core.logging import get_logger
 from atlascore.schemas import SCHEMA_VERSION
 from atlascore.schemas.crawl_job import JobType
-from atlascore.schemas.source import PolicyStatus
+from atlascore.schemas.source import AccessMethod, PolicyStatus
+from atlascore.security.secrets import sanitize_for_storage
 from atlascore.storage.postgres.models import CrawlJob, RawDocument, Source
 from atlascore.storage.queue import claim_next, complete, enqueue, fail
 from atlascore.storage.rawstore import RawStore
@@ -193,6 +197,30 @@ def run_fetch_job(
     return FetchJobResult(False, new_entries, len(entries), raw_doc.id)
 
 
+def _dispatch_fetch_job(
+    session: Session,
+    job: CrawlJob,
+    *,
+    fetcher: SafeFetcher,
+    raw_store: RawStore,
+    clock: Clock,
+) -> FetchJobResult | MacroFetchResult:
+    """Process one claimed fetch job by source family: RSS → documents, API → time-series.
+
+    The single fetch worker claims any fetch job, so the dispatch is by the *claimed* job's
+    source ``access_method`` (not by who enqueued it). The macro import is deferred to avoid an
+    import cycle (``worker.macro`` imports ``load_connector`` from here).
+    """
+    source = session.get(Source, job.source_id)
+    if source is None:
+        raise ConfigError(f"source {job.source_id} not found")
+    if AccessMethod(source.access_method) == AccessMethod.API:
+        from atlascore.worker.macro import run_macro_fetch_job
+
+        return run_macro_fetch_job(session, job, fetcher=fetcher, raw_store=raw_store, clock=clock)
+    return run_fetch_job(session, job, fetcher=fetcher, raw_store=raw_store, clock=clock)
+
+
 def run_one_fetch(
     engine: Engine,
     *,
@@ -200,11 +228,13 @@ def run_one_fetch(
     raw_store: RawStore,
     clock: Clock | None = None,
     worker_id: str = "fetch-worker",
-) -> FetchJobResult | None:
-    """Claim and process one fetch job. Returns ``None`` if the queue is empty.
+) -> FetchJobResult | MacroFetchResult | None:
+    """Claim and process one fetch job (any source family). Returns ``None`` if the queue is empty.
 
+    Returns the family-specific result (``FetchJobResult`` for RSS, ``MacroFetchResult`` for API).
     Broadly catches at this service boundary so a single bad job fails (retry/dead) rather than
-    crashing the worker loop (CLAUDE.md §18).
+    crashing the worker loop (CLAUDE.md §18). The logged error is sanitized (a FRED ``?api_key=…``
+    URL must never reach a log — §14).
     """
     clock = clock or SystemClock()
     with Session(engine) as session, session.begin():
@@ -218,15 +248,16 @@ def run_one_fetch(
             with session.begin():
                 job = session.get(CrawlJob, job_id)
                 assert job is not None  # noqa: S101 — just claimed in the prior txn
-                result = run_fetch_job(
+                result = _dispatch_fetch_job(
                     session, job, fetcher=fetcher, raw_store=raw_store, clock=clock
                 )
                 complete(session, job, now=clock.now())
             return result
         except Exception as exc:  # service boundary: fail the job, keep the worker alive
+            safe = sanitize_for_storage(f"{type(exc).__name__}: {exc}")
             with session.begin():
                 job = session.get(CrawlJob, job_id)
                 if job is not None:
-                    fail(session, job, now=clock.now(), error=f"{type(exc).__name__}: {exc}")
-            _log.warning("fetch_job_failed", job_id=str(job_id), error=str(exc))
-            return FetchJobResult(False, 0, 0, None, error=str(exc))
+                    fail(session, job, now=clock.now(), error=safe)
+            _log.warning("fetch_job_failed", job_id=str(job_id), error=safe)
+            return FetchJobResult(False, 0, 0, None, error=safe)

@@ -117,6 +117,9 @@ class SourceConfig(BaseModel):
     connector: str | None = None
     schedule: str | None = None
     timeout_seconds: int | None = None
+    # Connector-specific, non-secret settings (e.g. FRED ``series_id``). NEVER a credential —
+    # secrets resolve from env via ``credential_ref`` (CLAUDE.md §3).
+    params: dict[str, str] = Field(default_factory=dict)
 
 
 class SourceRecord(BaseModel):
@@ -180,6 +183,8 @@ class SourceFetch(BaseModel):
     connector: str
     schedule: str
     timeout_seconds: int = Field(gt=0)
+    # Connector-specific, non-secret params (e.g. ``{series_id: CPIAUCSL}`` for FRED).
+    params: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("connector")
     @classmethod
@@ -267,6 +272,7 @@ class SourceYAML(BaseModel):
                 connector=self.fetch.connector,
                 schedule=self.fetch.schedule,
                 timeout_seconds=self.fetch.timeout_seconds,
+                params=self.fetch.params,
             ),
             parser_ref=None,
             credential_ref=self.credentials.ref,

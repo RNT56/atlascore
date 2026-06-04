@@ -1,9 +1,10 @@
-"""Connector result types (B4 subset: fetch outcome + feed entry)."""
+"""Connector result types: fetch outcome + feed entry (B4) + time-series observations (B9)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 
 @dataclass(frozen=True)
@@ -34,3 +35,27 @@ class FeedEntry:
     published: datetime | None = None
     summary: str | None = None
     content_html: str | None = None
+
+
+@dataclass(frozen=True)
+class Observation:
+    """One scalar time-series point (macro ``kind=observation``).
+
+    ``value`` is a :class:`~decimal.Decimal` (or ``None`` for a missing/gap value — never
+    zero-filled) so ``numeric`` precision is preserved end to end. ``vintage`` is the data
+    as-of date for a revisable series (``None`` = latest).
+    """
+
+    ts: datetime
+    value: Decimal | None
+    vintage: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ParsedSeries:
+    """A parsed time-series: provider + series id + unit + ordered observations."""
+
+    provider: str
+    series_id: str
+    unit: str | None
+    observations: list[Observation]

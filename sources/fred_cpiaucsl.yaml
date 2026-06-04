@@ -1,0 +1,31 @@
+# AtlasCore source registry — FRED CPI (CPIAUCSL), monthly macro series (API).
+#
+# Policy note (operator): FRED is a free, official data service of the Federal
+# Reserve Bank of St. Louis. Its API is documented for programmatic use with an
+# API key, so it is marked `approved` for internal research. The api key is NEVER
+# stored here — `credentials.ref` names an environment key (FRED_API_KEY) resolved
+# at runtime (CLAUDE.md §3, §14). No secrets and no private endpoints live here.
+
+id: fred_cpiaucsl
+name: FRED — CPI for All Urban Consumers (CPIAUCSL)
+category: macro_economics
+access_method: api
+# For an API source, base_url is the API root; the connector appends the path + params.
+base_url: https://api.stlouisfed.org
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+# FRED's documented courtesy limit is generous; stay well under it.
+rate_limit: { max_requests: 10, window_seconds: 1 }
+freshness: { target: "30d", warn_after: "45d", error_after: "60d" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: FRED_API_KEY }   # an ENV KEY name, never the value
+fetch:
+  connector: atlascore.connectors.fred.series:FredConnector
+  schedule: "0 6 * * *"               # daily; CPI is monthly, so this just catches releases/revisions
+  timeout_seconds: 30
+  params:
+    series_id: CPIAUCSL
+    unit: "Index 1982-1984=100"
