@@ -435,6 +435,8 @@ CREATE INDEX embedding_document_idx ON embedding (document_id);
 CREATE INDEX embedding_ann_idx ON embedding USING hnsw (vector vector_cosine_ops);
 ```
 
+> **Implemented (B11) — migration `0007`** ([ADR 0021](../decisions/0021-b11-enrichment-entity-mention-embedding.md)). Created via **raw SQL** (the `vector(N)` column + HNSW index don't round-trip through autogenerate); `N` is pinned at **384** (`EMBEDDING_DIM`). The whole `embedding` table is excluded from the drift-check by owning table in `migrations/env.py`. `storage.embeddings.upsert_embeddings` chunks the body, embeds via the configured `EmbeddingBackend`, and is a **no-op skip** when the stored `source_hash` (= `document.content_hash`) is unchanged (R13). MVP's `local` backend is the deterministic `HashingEmbeddingBackend`; sentence-transformers/cloud are pluggable upgrades (same dim → no reindex; a different dim is the R8 runbook).
+
 ---
 
 ### 2.7 time_series_point
@@ -549,6 +551,8 @@ CREATE INDEX entity_aliases_idx     ON entity USING gin (aliases);
 CREATE INDEX entity_identifiers_idx ON entity USING gin (identifiers);
 ```
 
+> **Implemented (B11) — migration `0007`** ([ADR 0021](../decisions/0021-b11-enrichment-entity-mention-embedding.md)). Raw SQL (trigram + array GINs); excluded from the drift-check by owning table. `storage.entities.find_or_create_entity` resolves a NER candidate by identifier (jsonb containment) then exact normalized name/alias, else creates; `resolve_entity` (the `get_entity_mentions` read side) adds **alias-aware trigram fuzzy** name matching and follows `merged_into` to the surviving id.
+
 ---
 
 ### 2.9 mention
@@ -590,6 +594,8 @@ CREATE TABLE mention (
 CREATE INDEX mention_entity_idx   ON mention (entity_id, mentioned_at);
 CREATE INDEX mention_document_idx ON mention (document_id);
 ```
+
+> **Implemented (B11) — migration `0007`** ([ADR 0021](../decisions/0021-b11-enrichment-entity-mention-embedding.md)). Raw SQL; excluded from the drift-check by owning table. Adds a **unique `(entity_id, document_id, model_name, model_version)`** index so re-enriching a document upserts mentions idempotently (the pipeline clears + re-creates this document's mentions for the current NER model+version). `context_snippet` is taken from the already-sanitized `document.body_text` (evidence, not instruction); `sentiment` stays `null` in MVP (never fabricated). `storage.entities.list_mentions` joins document/source for `get_entity_mentions` provenance.
 
 ---
 

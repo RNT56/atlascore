@@ -46,20 +46,40 @@ _MANUAL_INDEXES = frozenset(
 )
 
 
+# Whole tables created via raw SQL (autogenerate can't round-trip them) — every object owned by
+# one of these tables is skipped by the drift-check, the way ``time_series_point`` (0006) is:
+#   - ``entity``    — trigram ``gin (canonical_name gin_trgm_ops)`` + array GINs (need pg_trgm)
+#   - ``mention``   — for DDL consistency with its siblings
+#   - ``embedding`` — ``pgvector vector(N)`` column + HNSW ANN index
+# The ORM models map their columns for querying/upserts only; the real DDL lives in migration 0007.
+_RAW_SQL_TABLES = frozenset({"entity", "mention", "embedding"})
+
+
+def _is_raw_sql_table(table_name: str | None) -> bool:
+    """True for a table whose DDL is hand-written in a migration (not autogenerate-managed)."""
+    if table_name is None:
+        return False
+    return table_name.startswith("time_series_point") or table_name in _RAW_SQL_TABLES
+
+
 def _include_object(
     obj: object, name: str | None, type_: str, reflected: bool, compare_to: object
 ) -> bool:
     """Skip manually-managed objects during autogenerate.
 
     - The expression/partial/GIN indexes created via raw SQL (migration 0003).
-    - The whole ``time_series_point`` partitioned table and everything named after it (the
-      parent, the ``_default`` partition, its index and constraints) — created via raw SQL in
-      migration 0006 because autogenerate cannot emit ``PARTITION BY`` (the ORM model maps the
-      columns for querying only).
+    - The whole ``time_series_point`` partitioned table (0006) and the enrichment tables
+      ``entity``/``mention``/``embedding`` (0007) — created via raw SQL because autogenerate cannot
+      emit ``PARTITION BY``, trigram/array GINs, or a pgvector ``vector(N)``/HNSW index. We match by
+      the **owning table** (not a bare name prefix) so a normal column like ``document.entity_ids``
+      is still drift-checked.
     """
     if type_ == "index" and name in _MANUAL_INDEXES:
         return False
-    return not (name is not None and name.startswith("time_series_point"))
+    if type_ == "table":
+        return not _is_raw_sql_table(name)
+    table_name = getattr(getattr(obj, "table", None), "name", None)
+    return not _is_raw_sql_table(table_name)
 
 
 def run_migrations_offline() -> None:

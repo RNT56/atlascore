@@ -62,6 +62,8 @@ _SEARCH_SQL = text(
       AND (CAST(:source AS text) IS NULL OR s.config->>'slug' = :source)
       AND (CAST(:since AS timestamptz) IS NULL OR d.published_at >= :since)
       AND (CAST(:until AS timestamptz) IS NULL OR d.published_at < :until)
+      AND (CAST(:topics AS text[]) IS NULL OR d.topics && CAST(:topics AS text[]))
+      AND (CAST(:entity_ids AS text[]) IS NULL OR d.entity_ids && CAST(:entity_ids AS text[]))
     ORDER BY rank DESC, d.published_at DESC NULLS LAST
     LIMIT :limit
     """
@@ -101,14 +103,17 @@ def search_documents(
     source: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    topics: list[str] | None = None,
+    entity_ids: list[str] | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> list[SearchHit]:
     """Rank ``document`` rows by full-text match on ``body_text`` with optional filters.
 
     ``source`` filters by the source slug (``config->>'slug'``); ``since``/``until`` bound
-    ``published_at`` (``since`` inclusive, ``until`` exclusive). An empty/whitespace query
-    returns ``[]`` (no match attempted). ``limit`` is clamped to ``[1, MAX_LIMIT]``. The
-    caller manages the transaction/session.
+    ``published_at`` (``since`` inclusive, ``until`` exclusive). ``topics``/``entity_ids`` are
+    array-overlap filters (a hit must carry at least one of the given topics / entity ids — the
+    enrichment columns + array GINs from B5/B11). An empty/whitespace query returns ``[]`` (no
+    match attempted). ``limit`` is clamped to ``[1, MAX_LIMIT]``. The caller manages the session.
     """
     cleaned = query.strip()
     if not cleaned:
@@ -117,7 +122,16 @@ def search_documents(
 
     rows = session.execute(
         _SEARCH_SQL,
-        {"q": cleaned, "source": source, "since": since, "until": until, "limit": capped},
+        {
+            "q": cleaned,
+            "source": source,
+            "since": since,
+            "until": until,
+            # Empty list => no filter (treat as NULL) so a caller passing [] doesn't match nothing.
+            "topics": topics or None,
+            "entity_ids": entity_ids or None,
+            "limit": capped,
+        },
     ).mappings()
     return [
         SearchHit(

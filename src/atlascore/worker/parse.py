@@ -29,7 +29,7 @@ from atlascore.schemas.crawl_job import JobType
 from atlascore.schemas.document import DocumentRecord
 from atlascore.storage.documents import upsert_document
 from atlascore.storage.postgres.models import CrawlJob, RawDocument, Source
-from atlascore.storage.queue import claim_next, complete, fail
+from atlascore.storage.queue import claim_next, complete, enqueue, fail
 from atlascore.storage.rawstore import RawStore
 from atlascore.worker.run import load_connector
 
@@ -117,6 +117,18 @@ def _persist(session: Session, records: list[DocumentRecord], *, clock: Clock) -
             updated += 1
         else:
             unchanged += 1
+        # Drive the pipeline forward: a created/changed document gets an idempotent enrich job
+        # (language → NER → topics → embeddings, B11). The content_hash in the dedupe_key means an
+        # unchanged re-parse never re-enqueues, and a changed body re-enriches (last-write-wins).
+        if result.changed:
+            enqueue(
+                session,
+                source_id=record.source_id,
+                job_type=JobType.ENRICH,
+                dedupe_key=f"enrich:{result.document_id}:{record.content_hash}",
+                scheduled_at=now,
+                payload={"document_id": str(result.document_id)},
+            )
     return ParseJobResult(created, updated, unchanged)
 
 

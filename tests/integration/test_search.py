@@ -152,7 +152,15 @@ def test_search_query_path(migrated_engine: Engine) -> None:
                 session.execute(text(f"SET LOCAL {knob} = off"))
             plan = session.execute(
                 text("EXPLAIN (COSTS OFF) " + str(_SEARCH_SQL)),
-                {"q": "rates", "source": None, "since": None, "until": None, "limit": MAX_LIMIT},
+                {
+                    "q": "rates",
+                    "source": None,
+                    "since": None,
+                    "until": None,
+                    "topics": None,
+                    "entity_ids": None,
+                    "limit": MAX_LIMIT,
+                },
             ).all()
             assert "ix_document_fts" in "\n".join(row[0] for row in plan)
     finally:

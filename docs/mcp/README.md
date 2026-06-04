@@ -280,6 +280,8 @@ All tools are read-oriented, stdio-served, schema-validated, capped, audited, an
 
 **Safety notes.** `context_snippet` is **sanitized** and is evidence, not instruction. Fuzzy name resolution returns its `match_confidence` so the agent can judge ambiguity rather than the server guessing. Sentiment is `null` when not computed — never fabricated. **PII note:** mentions can reference named individuals; this tool does **no targeting/profiling** beyond returning what was already extracted, and purged entities/documents disappear from results (see purge cascade, §3.3). Audited as `tool_name=get_entity_mentions`.
 
+> **Implemented (B11) — `atlascore.mcp_server` + migration `0007`** ([ADR 0021](../decisions/0021-b11-enrichment-entity-mention-embedding.md)). Resolves an entity by exact `entity_id` (confidence 1.0) → `identifier` jsonb containment (0.95) → alias-aware **trigram fuzzy** `name` (`pg_trgm` `similarity`; exact normalized name/alias = 1.0), following `merged_into` to the surviving id. Returns `found=false` + a `reason` when no entity matches or when none of `entity_id`/`name`/`identifier` is given (never fabricates). Inputs: `entity_id`, `name` (≤256), `identifier` (e.g. `{"ticker":"AAPL"}`/`{"cik":"0000320193"}`), `since`/`until`, `min_confidence` (0–1), `limit` (1–**100**, default 50). Each call writes one sanitized `audit_log` row (`tool_name=get_entity_mentions`, `target_ref`=resolved entity id). Mentions are produced by the deterministic rule-based NER in MVP (`model_name=rule-ner`); a spaCy backend is a pluggable upgrade. **Also in B11:** the previously-deferred `search_documents` `topics`/`entity_ids` array-overlap filters are now wired (GIN-backed), since enrichment populates those columns.
+
 ---
 
 ### 2.4 `get_document_summary`

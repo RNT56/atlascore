@@ -8,7 +8,31 @@
 
 ## Current phase
 
-**Block B10 — DONE (2026-06-04). Next: B11.**
+**Block B11 — DONE (2026-06-04). Next: B12.**
+
+**Documents are now enriched and the entity surface is queryable.** Migration `0007` adds the three
+enrichment tables — `entity` (trigram `gin (canonical_name gin_trgm_ops)` + array GINs +
+`merged_into`), `mention` (unique `(entity, document, ner-model+version)`), and `embedding`
+(`pgvector vector(384)` + HNSW) — all via raw SQL like `0006`, excluded from the drift-check **by
+owning table**. The enrichment pipeline (`atlascore.enrichment`) runs **language → NER → topics →
+embeddings** in one transaction, writing `document.language`/`topics`/`entity_ids` and creating
+entity/mention/embedding rows. MVP backends are **deterministic and dependency-free** (rule-based
+NER + hashing embeddings) so it runs offline/in CI; spaCy/sentence-transformers/cloud are pluggable
+behind the existing extras with no schema change. The parse worker enqueues one **idempotent**
+`enrich` job per changed document (so fetch→parse→enrich runs unattended); `atlas enrich <doc_id>`
+runs it directly. The **`get_entity_mentions`** MCP tool resolves by id → identifier → fuzzy name
+(trigram + aliases, `merged_into`-aware), capped + audited, with sanitized snippets; the deferred
+B7 `search_documents` `topics`/`entity_ids` filters are now wired
+([ADR 0021](decisions/0021-b11-enrichment-entity-mention-embedding.md)). **Done-when met:** entity
+mentions are queryable via `get_entity_mentions` — verified live (enrich → resolve by
+id/name/ticker → mentions with provenance, idempotent re-embed skip, full queue path + CLI).
+**260 tests pass**; ruff/mypy clean; migration `0007` applies + drift-check empty on live PG16.
+
+---
+
+### Prior phases
+
+**Block B10 — DONE (2026-06-04).**
 
 **SEC EDGAR filings + NVD CVEs are searchable documents.** Both are `access_method=api` sources
 that produce **documents** (not time-series), so B10 adds a **`Connector.output_kind`**
@@ -23,10 +47,6 @@ the required contact UA + 10 req/s, no key); `NvdCveConnector` fetches the CVE 2
 **Done-when met:** filings + CVEs searchable via `search_documents` — verified live (full SEC + NVD
 fetch → parse → search finds the 10-K filing, the buffer-overflow CVE, and the SQL-injection CVE).
 **240 tests pass**; ruff/mypy clean; no migration; no new `detect-secrets` findings.
-
----
-
-### Prior phases
 
 **Block B9 — DONE (2026-06-04).** The **macro time-series** path. Migration `0006` creates
 `time_series_point` — the **first partitioned table** (composite PK `(id, ts)`, `UNIQUE NULLS NOT
@@ -237,47 +257,63 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-*(none)* — B10 closed. B11 not yet claimed.
+*(none)* — B11 closed. B12 not yet claimed.
 
 ---
 
 ## Next
 
-**B11 — Enrichment: language → NER → topics → embeddings (pgvector) + entity/mention +
-`get_entity_mentions`.**
+**B12 — Summaries pipeline (`SummaryBackend`, content-hash cache, `summary` table) +
+`get_document_summary`.**
 
-B10 made documents (RSS/SEC/NVD) searchable. B11 enriches them and adds the entity surface:
+B11 enriched documents and added the entity surface. B12 adds cached, cited summaries:
 
-1. **Enrichment pipeline** (`atlascore.enrichment`) — language detection → NER (spaCy small +
-   rules) → topics → embeddings. Runs as `job_type=enrich` over `document` rows; writes `topics` /
-   `entity_ids` on `document` (the columns + array GINs already exist from B5).
-2. **`embedding` table** (docs/schemas §2.6) — `pgvector vector(N)`; **ONE active embedding
-   model+dim per deployment** (R8); `unique(document_id, chunk_index, model_name, model_version)`
-   (idempotent re-embedding). `EmbeddingBackend` = `local` (sentence-transformers) | `openai` |
-   `google` + a deterministic test stub; `EMBEDDING_BACKEND`/`EMBEDDING_MODEL`/`EMBEDDING_DIM`.
-   New migration (HNSW ANN index). **Cloud egress caveat** (§16/§20): prefer local for PII docs.
-3. **`entity` + `mention` tables** (docs/schemas §2.8/§2.9) — `entity` (trigram `gin
-   (canonical_name gin_trgm_ops)`, `GIN(aliases)`/`GIN(identifiers)`, `merged_into`); `mention`
-   (`btree(entity_id, mentioned_at)`). Resolve `merged_into` so a merged entity's mentions reach
-   from its surviving id.
-4. **`get_entity_mentions`** MCP tool (docs/mcp §2.3) — alias-aware (trigram + identifiers),
-   confidence, capped, audited; sanitized `context_snippet`.
+1. **`summary` table** (docs/schemas §2.5) — cached LLM summaries with full provenance:
+   `scope (single|multi)`, `document_id`/`member_doc_ids[]` (ordered), `source_hash` (over ordered
+   member `content_hash`es), `model_name`/`model_version`/`prompt_version`, `summary_text`,
+   `citations` jsonb, `token_cost`. Cache key `unique(source_hash, model_name, model_version,
+   prompt_version)`; `GIN(member_doc_ids)` (required for purge, R3). New migration (raw-SQL GIN like
+   the others, excluded from drift-check by owning table).
+2. **`SummaryBackend` / LLM** (`atlascore.enrichment.summaries`) — `LLM_BACKEND=local|api|none`;
+   `none` ⇒ return only cached summaries, else `null` + reason (never hallucinate). `prompt_version`
+   tracked; content-hash cache; **dedupe before summarize**; cloud egress caveat (§16/§20) + the
+   HARD `LLM_MONTHLY_SPEND_CAP_EUR`. Mirror B11's backend pattern: a deterministic/extractive default
+   so it runs offline, hosted LLMs pluggable behind the `api` extra.
+3. **`get_document_summary`** MCP tool (docs/mcp §2.4) — cached, cited summary of one OR more docs;
+   `LLM_BACKEND`-aware; `null` + reason when nothing cached and backend `none`; capped + audited.
 
-This also **unblocks the deferred `search_documents` topic/entity filters** (B7/ADR 0017) once
-`topics`/`entity_ids` are populated.
+**Definition of done for B12:** a cached, cited summary via MCP; no re-summarization of an identical
+tuple.
 
-**Definition of done for B11:** entity mentions are queryable (via `get_entity_mentions`).
-
-Build-order reminders: B12 summaries + `get_document_summary`; B13 the three rule-based alerts +
-delivery (wires the real digest channel + freshness alerts) + `get_alerts` (the SEC/NVD connectors
-power `sec_filing`/`cve_watch`); B14 backups + purge; B15 hardening. Still pending: the **scheduler**
-block (timed `job_type=freshness` + the daily FRED/EDGAR/NVD fetches + single-scheduler liveness),
-`time_series_point` **yearly partitions**, SEC full-filing (Tika) + NVD keyed tier.
+Build-order reminders: B13 the three rule-based alerts + delivery (wires the real digest channel +
+freshness alerts) + `get_alerts` (the SEC/NVD connectors power `sec_filing`/`cve_watch`; FRED powers
+`macro_release`); B14 backups + purge (the R3 cascade now spans `embedding`/`mention`/`entity` from
+B11 + `summary` from B12 — incl. the multi-doc summary regression); B15 hardening. Still pending:
+the **scheduler** block (timed `job_type=freshness` + the daily FRED/EDGAR/NVD fetches + the
+fetch→parse→enrich worker loop + single-scheduler liveness), `time_series_point` **yearly
+partitions**, SEC full-filing (Tika) + NVD keyed tier, and a **real embedding backend**
+(sentence-transformers/cloud) to replace the deterministic hashing baseline.
 
 ---
 
 ## Known issues
 
+- **B11 enrichment backends are deterministic baselines (by design; ADR 0021).** The `local`
+  embedding backend is a **hashing vectorizer** (lexical overlap, not semantics) — a real ANN
+  ranking needs the pluggable sentence-transformers/cloud backend wired (a localized change; same
+  dim → no reindex). NER is **rule-based** (ticker/CIK + capitalized phrases), precision-over-recall:
+  it drops single-word generic proper nouns, and corporate-suffix heuristics can misclassify ("Bank
+  of England" → `company` via the `bank` suffix). `spacy`/`sentence-transformers` are declared
+  optional extras but **not installed/wired** in MVP (`EMBEDDING_BACKEND=openai|google` raises a
+  clear `ConfigError`). Language detection is the parser value + a tiny stopword heuristic, else
+  honest `None`. `mention.sentiment` is always `null` (never fabricated). Entity **merging** is
+  resolvable (`merged_into` is followed) but no merge **operation** exists yet — `merged_into` is
+  null in practice.
+- **B11 enrich runs via the queue OR `atlas enrich`, but no scheduler drives it yet.** The parse
+  worker enqueues an idempotent `enrich` job per changed document; a worker must run `run_one_enrich`
+  (or `atlas enrich <doc_id>` one-shot) to process it. The timed worker loop lands with the scheduler
+  block. The `enrich` job's `dedupe_key` folds in `content_hash`, so an unchanged re-parse never
+  re-enqueues and a changed body re-enriches (last-write-wins).
 - **CI jobs that depend on later blocks are expected to be red until then**, by design: the
   `source-yaml` job calls `atlas source validate --all` (lands in **B2**), and `make seed` / the
   smoke target exercise ingestion (B2+). B1-owned jobs (lint-format, typecheck, test, migrations,
@@ -308,10 +344,10 @@ block (timed `job_type=freshness` + the daily FRED/EDGAR/NVD fetches + single-sc
   raw feed's `content_hash`, so when any item changes, every item gets a fresh (idempotent, cheap)
   parse job. Correct, slightly wasteful; a per-item content key is a possible later refinement.
 - **MCP `search_documents` is narrower than the docs/mcp §2.1 sketch (by design, B7)** — source
-  filtering is a single `source` slug (not `source_ids[]`), and the `topics`/`entity_ids` filters are
-  **deferred to B11** (the columns are returned per hit but stay empty until enrichment runs). The
-  `truncated` flag is a `len(hits) >= limit` heuristic (no separate count query), so it can read
-  `true` when exactly `limit` rows exist with none behind them. Documented in
+  filtering is a single `source` slug (not `source_ids[]`). The `topics`/`entity_ids` array-overlap
+  filters are **now wired (B11)** once enrichment populates those columns. The `truncated` flag is a
+  `len(hits) >= limit` heuristic (no separate count query), so it can read `true` when exactly
+  `limit` rows exist with none behind them. Documented in
   [ADR 0017](decisions/0017-b7-mcp-server-search-documents-and-audit-log.md).
 - **MCP server connects to the DB lazily (B7)** — `atlas mcp dev` starts the stdio server before
   reaching Postgres; the engine is created on the first tool call, so a DB outage surfaces as a tool

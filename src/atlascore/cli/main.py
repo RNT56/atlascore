@@ -13,6 +13,7 @@ from typing import Annotated
 import typer
 
 from atlascore.cli.crawl import crawl_app
+from atlascore.cli.enrich import enrich_cmd
 from atlascore.cli.health import digest_cmd, health_cmd
 from atlascore.cli.mcp import mcp_app
 from atlascore.cli.parse import parse_raw
@@ -29,6 +30,7 @@ app.add_typer(source_app, name="source")
 app.add_typer(crawl_app, name="crawl")
 app.add_typer(mcp_app, name="mcp")
 app.command(name="parse")(parse_raw)
+app.command(name="enrich")(enrich_cmd)
 app.command(name="search")(search_cmd)
 app.command(name="health")(health_cmd)
 app.command(name="digest")(digest_cmd)

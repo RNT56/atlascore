@@ -18,10 +18,38 @@ SSRF-guarded fetcher + worker**, the **B5 article parser + canonical `document` 
 worker**, the **B6 full-text search query path + `atlas search` CLI**, the **B7 MCP server
 + `search_documents` + `audit_log` table**, the **B8 freshness/health subsystem
 (`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**, the **B9 macro
-time-series (`time_series_point` + FRED connector + `get_macro_series`)**, and the **B10 SEC EDGAR
-+ NVD document connectors**. The MVP continues at block **B11**.
+time-series (`time_series_point` + FRED connector + `get_macro_series`)**, the **B10 SEC EDGAR
++ NVD document connectors**, and the **B11 enrichment subsystem (language → NER → topics →
+embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**. The MVP continues at
+block **B12**.
 
 ### Added
+
+- **B11 — enrichment pipeline + entity surface** ([ADR 0021](docs/decisions/0021-b11-enrichment-entity-mention-embedding.md)).
+  - **`entity` / `mention` / `embedding` tables** (migration `0007`, raw SQL like `0006`):
+    `entity` (trigram `gin (canonical_name gin_trgm_ops)` + array GINs + `merged_into`), `mention`
+    (`btree(entity_id, mentioned_at)` + unique `(entity, document, model_name, model_version)`),
+    `embedding` (`pgvector vector(384)` = `EMBEDDING_DIM`, HNSW ANN index, unique
+    `(document, chunk_index, model_name, model_version)`, R8/R13). All three (and their objects) are
+    excluded from the autogenerate drift-check by owning table in `migrations/env.py`.
+  - **Deterministic, dependency-free default backends** (offline / CI-safe; heavy backends stay
+    behind the existing `local-embeddings`/`cloud` extras): `enrichment.ner.rules.RuleBasedNer`
+    (ticker/CIK patterns + sentence-bounded capitalized-phrase extraction, precision-over-recall),
+    `enrichment.embeddings.hashing.HashingEmbeddingBackend` (BLAKE2b token bucketing, L2-normalized,
+    dim from settings), `enrichment.topics` (keyword→topic map), `enrichment.language` (parser
+    value + tiny heuristic, else honest `None`). `NerBackend`/`EmbeddingBackend` interfaces +
+    factories make spaCy/sentence-transformers/cloud drop-in later (no schema change).
+  - **Enrichment pipeline + worker** (`enrichment.pipeline.enrich_document`, `worker.enrich`):
+    language → NER → topics → embeddings in one transaction; writes `document.language`/`topics`/
+    `entity_ids`, find-or-create entities (by identifier, then exact name/alias), idempotent mentions
+    (cleared + re-created per NER model+version), idempotent embeddings (R13 `source_hash` skip). The
+    parse worker enqueues one idempotent `enrich` job per changed document, so fetch→parse→enrich
+    runs unattended. `atlas enrich <doc_id>` runs it directly.
+  - **`get_entity_mentions` MCP tool** (docs/mcp §2.3): resolve by `entity_id` → `identifier`
+    (jsonb containment) → fuzzy `name` (trigram + aliases), `merged_into`-aware, with
+    `match_confidence`; sanitized `context_snippet` + document/source provenance; capped (≤100),
+    audited. **The deferred B7 `search_documents` `topics`/`entity_ids` filters are now wired**
+    (array overlap, GIN-backed).
 
 - **Canonical project plan** — `docs/PROJECT-PLAN.md`: rationale, architecture narrative,
   source categories, build-vs-adopt, the single ordered MVP backlog (B1–B15), roadmap,
