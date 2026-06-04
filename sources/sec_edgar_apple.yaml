@@ -1,0 +1,30 @@
+# AtlasCore source registry — SEC EDGAR recent filings for Apple Inc. (API).
+#
+# Policy note (operator): SEC EDGAR is the public, official US filings system. Its
+# data is public and the API is documented for programmatic use, so it is marked
+# `approved` for internal research. SEC REQUIRES a descriptive User-Agent with a
+# contact (sent as DEFAULT_USER_AGENT) and a 10 req/s limit — both are enforced.
+# No API key. No secrets and no private endpoints live here.
+
+id: sec_edgar_apple
+name: SEC EDGAR — Apple Inc. filings (CIK 320193)
+category: finance_filings
+access_method: api
+# For an API source, base_url is the API host; the connector appends the path.
+base_url: https://data.sec.gov
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+# SEC's mandatory limit: 10 requests per second (host-scoped, single fetch worker).
+rate_limit: { max_requests: 10, window_seconds: 1 }
+freshness: { target: "24h", warn_after: "48h", error_after: "96h" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }   # SEC needs no key (a UA-with-contact is required, sent by the fetcher)
+fetch:
+  connector: atlascore.connectors.sec.submissions:SecSubmissionsConnector
+  schedule: "*/30 * * * *"
+  timeout_seconds: 30
+  params:
+    cik: "320193"             # Apple Inc.; the connector zero-pads to CIK0000320193

@@ -18,6 +18,7 @@ from uuid import UUID
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
+from atlascore.connectors_sdk.base import OutputKind
 from atlascore.core.clock import Clock, SystemClock
 from atlascore.core.errors import ConfigError
 from atlascore.core.hashing import content_hash
@@ -26,7 +27,6 @@ from atlascore.parsers.article import ArticleParser
 from atlascore.schemas import SCHEMA_VERSION
 from atlascore.schemas.crawl_job import JobType
 from atlascore.schemas.document import DocumentRecord
-from atlascore.schemas.source import AccessMethod
 from atlascore.storage.documents import upsert_document
 from atlascore.storage.postgres.models import CrawlJob, RawDocument, Source
 from atlascore.storage.queue import claim_next, complete, fail
@@ -55,19 +55,19 @@ def build_document_records(
     """Normalize a raw feed into ``DocumentRecord``s (the parse → normalize stages).
 
     ``only_guid`` restricts to a single feed item (the per-GUID parse-job path); ``None``
-    yields every item (the ``atlas parse <raw_id>`` re-parse path). RSS only in B5; the
-    filing (B10) and macro (B9) parsers land with their connectors.
+    yields every item (the ``atlas parse <raw_id>`` re-parse path). Works for any
+    **document** connector (RSS in B5; SEC + NVD in B10) — each implements ``parse_entries``
+    and the shared ``ArticleParser`` turns the item content into a sanitized ``document`` body.
+    Time-series connectors (FRED) take the macro path and never reach here.
     """
-    method = AccessMethod(source.access_method)
-    if method != AccessMethod.RSS:
-        raise NotImplementedError(
-            f"no document parser for access_method '{method.value}' yet "
-            "(B5 ships RSS; filing=B10, macro=B9)"
-        )
     connector_ref = (source.config or {}).get("connector")
     if not connector_ref:
         raise ConfigError(f"source {source.name} has no fetch.connector configured")
     connector = load_connector(connector_ref)
+    if connector.output_kind != OutputKind.DOCUMENT:
+        raise NotImplementedError(
+            f"connector {connector_ref} produces {connector.output_kind.value}, not documents"
+        )
 
     entries = connector.parse_entries(raw_bytes)
     if only_guid is not None:

@@ -8,29 +8,35 @@
 
 ## Current phase
 
-**Block B9 — DONE (2026-06-04). Next: B10.**
+**Block B10 — DONE (2026-06-04). Next: B11.**
 
-The **macro time-series** path is in place. Migration `0006` creates `time_series_point` — the
-**first RANGE-partitioned table** (docs/schemas §2.7): composite PK `(id, ts)`, `UNIQUE NULLS NOT
-DISTINCT (provider, series_id, ts, vintage)`, `kind` CHECK, OHLCV (nullable), a DEFAULT partition;
-created via raw SQL and excluded from the drift-check by a `time_series_point` name-prefix rule.
-The **FRED connector** (`connectors.fred.series`) fetches a series' observations and parses them to
-`Decimal` (a FRED `"."` → null, never zero-filled). The connector ABC now supports both families
-(`parse_entries`/`parse_observations` default-raise); `FetchContext` carries connector `params` +
-the resolved `credential`. The single fetch worker (`run_one_fetch`) dispatches on `access_method`:
-RSS → documents, **API → `worker.macro`** (fetch → store raw → idempotent
-`upsert_observations`). `fetch.params` (e.g. `series_id`/`unit`) round-trips into `source.config`;
-**`resolve_credential`** resolves the FRED api key from env and the `?api_key=…` URL is sanitized
-out of every log/column. The **`get_macro_series`** MCP tool (third tool) returns a series with
-`value` as a string (numeric precision), missing→null, capped `≤2000`, audited
-([ADR 0019](decisions/0019-b9-time-series-fred-connector-and-macro-series.md)). **Done-when met:**
-query a macro series via MCP — verified live (full FRED fetch → `time_series_point` → idempotent
-re-fetch → `get_macro_series`) and over real stdio; the api key provably never reaches `crawl_job`.
-**228 tests pass**; ruff/mypy clean; migration `0006` applies, reverses, drift-check empty.
+**SEC EDGAR filings + NVD CVEs are searchable documents.** Both are `access_method=api` sources
+that produce **documents** (not time-series), so B10 adds a **`Connector.output_kind`**
+discriminator (`document` | `timeseries`): the single fetch worker (`run_one_fetch`) now dispatches
+by what the connector *produces* — `timeseries` → `worker.macro` (FRED), else → the **B5 document
+pipeline**. `run_fetch_job`'s `FetchContext` carries connector `params` + the resolved `credential`.
+`SecSubmissionsConnector` fetches `/submissions/CIK##########.json` (CIK from `params.cik`, sends
+the required contact UA + 10 req/s, no key); `NvdCveConnector` fetches the CVE 2.0 JSON API (keyless
+~5 req/30 s). Both implement `parse_entries` → `FeedEntry` → the shared `ArticleParser` → searchable
+`document` (no new parser, **no schema change**)
+([ADR 0020](decisions/0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md)).
+**Done-when met:** filings + CVEs searchable via `search_documents` — verified live (full SEC + NVD
+fetch → parse → search finds the 10-K filing, the buffer-overflow CVE, and the SQL-injection CVE).
+**240 tests pass**; ruff/mypy clean; no migration; no new `detect-secrets` findings.
 
 ---
 
 ### Prior phases
+
+**Block B9 — DONE (2026-06-04).** The **macro time-series** path. Migration `0006` creates
+`time_series_point` — the **first partitioned table** (composite PK `(id, ts)`, `UNIQUE NULLS NOT
+DISTINCT`, DEFAULT partition; raw SQL; drift-check excluded by name prefix). The **FRED connector**
+fetches observations → `Decimal` (`"."` → null); the connector ABC supports both families
+(`parse_entries`/`parse_observations`); `FetchContext` carries `params` + `credential`. The fetch
+worker dispatches RSS → documents, FRED → `worker.macro` (idempotent `upsert_observations`).
+**`resolve_credential`** + sanitized `?api_key=…`; the **`get_macro_series`** MCP tool (value as
+string, missing→null, capped, audited)
+([ADR 0019](decisions/0019-b9-time-series-fred-connector-and-macro-series.md)).
 
 **Block B8 — DONE (2026-06-04).** The **freshness/health subsystem**. Migration `0005` creates
 `source_health` (current snapshot, PK `source_id`, `interval` lag, CHECK status, `btree(status)`).
@@ -215,40 +221,58 @@ until the current set runs unattended for a month before adding sources or servi
   - [ADR 0019](decisions/0019-b9-time-series-fred-connector-and-macro-series.md). Tests: unit (FRED
     parser golden + fetch contract via respx) + 1 integration (full chain, idempotent, audited,
     key-not-leaked). 228 pass total. Verified live + over real stdio.
+- **B10 — SEC EDGAR + NVD document connectors (2026-06-04).**
+  - `Connector.output_kind` (`document`|`timeseries`); `run_one_fetch` dispatches by output_kind
+    (not access_method) so API sources can be documents (SEC/NVD) or time-series (FRED);
+    `build_document_records` guards on it; `run_fetch_job` `FetchContext` gains `params`+`credential`.
+  - `connectors.sec.submissions.SecSubmissionsConnector` (CIK submissions; UA + 10 req/s; no key) +
+    `connectors.nvd.cves.NvdCveConnector` (CVE 2.0; keyless ~5/30s). Both `parse_entries` →
+    `FeedEntry` → shared `ArticleParser` → searchable `document`. No new parser, **no migration**.
+  - `sources/sec_edgar_apple.yaml` + `sources/nvd_recent_cves.yaml` (approved); fixtures + unit
+    (SEC/NVD parser golden + fetch contract) + integration (search finds filing + CVE).
+  - [ADR 0020](decisions/0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md). 240 pass
+    total; verified live; no new detect-secrets findings.
 
 ---
 
 ## In progress
 
-*(none)* — B9 closed. B10 not yet claimed.
+*(none)* — B10 closed. B11 not yet claimed.
 
 ---
 
 ## Next
 
-**B10 — SEC EDGAR (basic) + NVD connectors.**
+**B11 — Enrichment: language → NER → topics → embeddings (pgvector) + entity/mention +
+`get_entity_mentions`.**
 
-B9 added the first API connector (FRED) + the connector `params`/credential machinery + the
-access-method dispatch — B10 reuses all of it for two more official/free API sources:
+B10 made documents (RSS/SEC/NVD) searchable. B11 enriches them and adds the entity surface:
 
-1. **SEC EDGAR** — honor the **10 req/s** limit and the required transparent User-Agent with a
-   contact (`DEFAULT_USER_AGENT`); filings become `document` rows (a filing parser, or reuse the
-   article/text path) so they are searchable via `search_documents`. `params` carries the CIK /
-   watch target. Robots is policy-input only (no runtime gate; API source).
-2. **NVD** (National Vulnerability Database) — CVEs become `document` rows (searchable); respect the
-   documented rate limits; an API key (if used) resolves via `credential_ref` → env.
-3. Per connector: SDK lifecycle, fixtures (success/empty/malformed/rate-limit/drift), a parser
-   golden test, and a short `docs/connectors/` note. Add `sources/sec_*.yaml` / `sources/nvd_*.yaml`
-   (policy `approved`).
+1. **Enrichment pipeline** (`atlascore.enrichment`) — language detection → NER (spaCy small +
+   rules) → topics → embeddings. Runs as `job_type=enrich` over `document` rows; writes `topics` /
+   `entity_ids` on `document` (the columns + array GINs already exist from B5).
+2. **`embedding` table** (docs/schemas §2.6) — `pgvector vector(N)`; **ONE active embedding
+   model+dim per deployment** (R8); `unique(document_id, chunk_index, model_name, model_version)`
+   (idempotent re-embedding). `EmbeddingBackend` = `local` (sentence-transformers) | `openai` |
+   `google` + a deterministic test stub; `EMBEDDING_BACKEND`/`EMBEDDING_MODEL`/`EMBEDDING_DIM`.
+   New migration (HNSW ANN index). **Cloud egress caveat** (§16/§20): prefer local for PII docs.
+3. **`entity` + `mention` tables** (docs/schemas §2.8/§2.9) — `entity` (trigram `gin
+   (canonical_name gin_trgm_ops)`, `GIN(aliases)`/`GIN(identifiers)`, `merged_into`); `mention`
+   (`btree(entity_id, mentioned_at)`). Resolve `merged_into` so a merged entity's mentions reach
+   from its surviving id.
+4. **`get_entity_mentions`** MCP tool (docs/mcp §2.3) — alias-aware (trigram + identifiers),
+   confidence, capped, audited; sanitized `context_snippet`.
 
-**Definition of done for B10:** filings + CVEs are searchable (via `search_documents`).
+This also **unblocks the deferred `search_documents` topic/entity filters** (B7/ADR 0017) once
+`topics`/`entity_ids` are populated.
 
-Build-order reminders: B11 enrichment + `get_entity_mentions` (also unblocks the deferred
-`search_documents` topic/entity filters); B12 summaries + `get_document_summary`; B13 the three
-rule-based alerts + delivery (wires the real digest channel + freshness alerts) + `get_alerts`; B14
-backups + purge; B15 hardening. Still pending: the **scheduler** block (timed `job_type=freshness` +
-the daily FRED/EDGAR/NVD fetches + single-scheduler liveness), and `time_series_point` **yearly
-partitions** for scale.
+**Definition of done for B11:** entity mentions are queryable (via `get_entity_mentions`).
+
+Build-order reminders: B12 summaries + `get_document_summary`; B13 the three rule-based alerts +
+delivery (wires the real digest channel + freshness alerts) + `get_alerts` (the SEC/NVD connectors
+power `sec_filing`/`cve_watch`); B14 backups + purge; B15 hardening. Still pending: the **scheduler**
+block (timed `job_type=freshness` + the daily FRED/EDGAR/NVD fetches + single-scheduler liveness),
+`time_series_point` **yearly partitions**, SEC full-filing (Tika) + NVD keyed tier.
 
 ---
 
@@ -315,6 +339,12 @@ partitions** for scale.
 - **Macro parse runs inline in the fetch worker (B9)** — unlike the scaled-out RSS parse, a macro
   series is parsed + upserted inside the (rate-limited, single) fetch worker. Fine for small series;
   revisit if a high-volume time-series source is added.
+- **SEC is "basic" + NVD is keyless (B10)** — SEC produces a per-filing **metadata** document
+  (form/company/date + link), not full filing-text extraction (sandboxed Tika is a later follow-up).
+  NVD runs the **keyless** tier (~5 req/30 s); the keyed `apiKey`-**header** tier needs custom-header
+  support in `SafeFetcher` (a follow-up). Neither does conditional/incremental requests yet (ETag /
+  `lastMod` cursor) — re-fetch is idempotent (dedupe by GUID + content hash) but re-reads the window.
+  Documented in ADR 0020.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
   - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
     creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked

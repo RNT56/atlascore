@@ -17,9 +17,9 @@ raw storage, the `crawl_job` queue, and `sanitize_for_storage`), the **B4 RSS co
 SSRF-guarded fetcher + worker**, the **B5 article parser + canonical `document` + parse
 worker**, the **B6 full-text search query path + `atlas search` CLI**, the **B7 MCP server
 + `search_documents` + `audit_log` table**, the **B8 freshness/health subsystem
-(`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**, and the **B9 macro
-time-series (`time_series_point` + FRED connector + `get_macro_series`)**. The MVP continues at
-block **B10**.
+(`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**, the **B9 macro
+time-series (`time_series_point` + FRED connector + `get_macro_series`)**, and the **B10 SEC EDGAR
++ NVD document connectors**. The MVP continues at block **B11**.
 
 ### Added
 
@@ -282,6 +282,26 @@ secrets-scan, integration).
   golden incl. missing values, fetch contract via respx incl. api-key URL, error cases) and
   integration (full fetch → `time_series_point` → idempotent re-fetch → `get_macro_series`, audited,
   api-key-not-leaked). Verified live + over real stdio.
+
+### Added — B10 (SEC EDGAR + NVD document connectors)
+
+- **`Connector.output_kind` dispatch** — a `document | timeseries` discriminator on the connector;
+  the single fetch worker dispatches by what the connector *produces* (not `access_method`), so an
+  `api` source can be a document source (SEC, NVD) or a time-series source (FRED). `run_fetch_job`'s
+  `FetchContext` now carries connector `params` + the resolved `credential`
+  ([ADR 0020](docs/decisions/0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md)).
+- **SEC EDGAR connector** (`atlascore.connectors.sec.submissions.SecSubmissionsConnector`) — fetches
+  `/submissions/CIK##########.json` for `params.cik` (zero-padded), sends the required contact
+  `User-Agent` + 10 req/s; each recent filing becomes a searchable `document` (accession = GUID,
+  primary-doc URL = canonical URL, `form — company` = title). No API key.
+- **NVD connector** (`atlascore.connectors.nvd.cves.NvdCveConnector`) — fetches the CVE 2.0 JSON API
+  (keyless tier, ~5 req/30 s); each CVE becomes a searchable `document` (CVE id = GUID, NVD detail
+  URL = canonical URL, English description = body). Optional `params.keyword` / `results_per_page`.
+- **Reuses the B5 document pipeline** — both connectors implement `parse_entries`; the shared
+  `ArticleParser` produces the sanitized body. No new parser, **no schema change**.
+- **Sources** `sources/sec_edgar_apple.yaml` + `sources/nvd_recent_cves.yaml` (both `approved`);
+  fixtures + tests — unit (SEC/NVD parser golden, fetch contract via respx) and integration (full
+  fetch → parse → `search_documents` finds the filing + the CVE — the B10 done-when).
 
 ### Added — B8 (freshness/health: `source_health` + `get_source_health` + digest)
 

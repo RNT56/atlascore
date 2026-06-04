@@ -1,0 +1,29 @@
+# AtlasCore source registry — NVD recent CVEs (CVE 2.0 JSON API).
+#
+# Policy note (operator): the National Vulnerability Database is a public US
+# government service; CVE data is public, so it is marked `approved` for internal
+# research. B10 runs the KEYLESS tier (~5 req / 30 s) — configured conservatively
+# below. NVD asks clients to sleep between requests and pull incrementally. The
+# keyed tier (higher limit, `apiKey` header) is a documented later enhancement.
+
+id: nvd_recent_cves
+name: NVD — recent CVEs
+category: security_cve
+access_method: api
+base_url: https://services.nvd.nist.gov
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+# Keyless NVD limit: ~5 requests per 30-second rolling window.
+rate_limit: { max_requests: 5, window_seconds: 30 }
+freshness: { target: "24h", warn_after: "48h", error_after: "96h" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }   # keyless tier; NVD_API_KEY (header) is a later enhancement
+fetch:
+  connector: atlascore.connectors.nvd.cves:NvdCveConnector
+  schedule: "0 * * * *"
+  timeout_seconds: 30
+  params:
+    results_per_page: "100"   # optional; the connector also accepts `keyword`

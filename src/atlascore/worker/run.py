@@ -25,15 +25,15 @@ if TYPE_CHECKING:  # annotation-only import (avoids the macro<->run import cycle
 from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
-from atlascore.connectors_sdk.base import Connector, FetchContext
+from atlascore.connectors_sdk.base import Connector, FetchContext, OutputKind
 from atlascore.connectors_sdk.fetcher import SafeFetcher
 from atlascore.core.clock import Clock, SystemClock
 from atlascore.core.errors import ConfigError, FetchWorkerBusyError, PolicyError
 from atlascore.core.logging import get_logger
 from atlascore.schemas import SCHEMA_VERSION
 from atlascore.schemas.crawl_job import JobType
-from atlascore.schemas.source import AccessMethod, PolicyStatus
-from atlascore.security.secrets import sanitize_for_storage
+from atlascore.schemas.source import PolicyStatus
+from atlascore.security.secrets import resolve_credential, sanitize_for_storage
 from atlascore.storage.postgres.models import CrawlJob, RawDocument, Source
 from atlascore.storage.queue import claim_next, complete, enqueue, fail
 from atlascore.storage.rawstore import RawStore
@@ -142,6 +142,10 @@ def run_fetch_job(
         timeout=float(config.get("timeout_seconds", 30)),
         max_requests=int(rate_limit.get("max_requests", 1)),
         window_seconds=float(rate_limit.get("window_seconds", 1)),
+        # Document API connectors (SEC, NVD) need connector params + the resolved credential;
+        # RSS ignores them.
+        params=config.get("params") or {},
+        credential=resolve_credential(source.credential_ref),
     )
 
     outcome = connector.fetch(fetcher, ctx)
@@ -214,7 +218,11 @@ def _dispatch_fetch_job(
     source = session.get(Source, job.source_id)
     if source is None:
         raise ConfigError(f"source {job.source_id} not found")
-    if AccessMethod(source.access_method) == AccessMethod.API:
+    # Dispatch by what the connector PRODUCES, not by access_method: an `api` source can be a
+    # document source (SEC, NVD) or a time-series source (FRED). Default to the document path
+    # (so a missing/bad connector ref raises the clear error in run_fetch_job).
+    connector_ref = (source.config or {}).get("connector")
+    if connector_ref and load_connector(connector_ref).output_kind == OutputKind.TIMESERIES:
         from atlascore.worker.macro import run_macro_fetch_job
 
         return run_macro_fetch_job(session, job, fetcher=fetcher, raw_store=raw_store, clock=clock)

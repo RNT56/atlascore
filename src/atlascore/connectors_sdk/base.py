@@ -10,10 +10,23 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import ClassVar
 
 from atlascore.connectors_sdk.fetcher import SafeFetcher
 from atlascore.connectors_sdk.types import FeedEntry, FetchOutcome, ParsedSeries
+
+
+class OutputKind(StrEnum):
+    """What canonical store a connector's output lands in — the fetch-worker dispatch key.
+
+    ``document`` connectors (RSS, SEC, NVD, …) implement :meth:`Connector.parse_entries` and
+    feed the B5 document pipeline; ``timeseries`` connectors (FRED, …) implement
+    :meth:`Connector.parse_observations` and feed ``time_series_point``.
+    """
+
+    DOCUMENT = "document"
+    TIMESERIES = "timeseries"
 
 
 @dataclass(frozen=True)
@@ -43,6 +56,9 @@ class Connector(ABC):
 
     name: ClassVar[str]
     accepted_mime_types: ClassVar[frozenset[str]]
+    # Which canonical store this connector's output lands in (the fetch-worker dispatch key).
+    # Defaults to ``document``; time-series connectors override it to ``timeseries``.
+    output_kind: ClassVar[OutputKind] = OutputKind.DOCUMENT
 
     @abstractmethod
     def fetch(self, fetcher: SafeFetcher, ctx: FetchContext) -> FetchOutcome:

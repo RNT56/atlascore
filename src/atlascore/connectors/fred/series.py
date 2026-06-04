@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlencode
 
-from atlascore.connectors_sdk.base import Connector, FetchContext
+from atlascore.connectors_sdk.base import Connector, FetchContext, OutputKind
 from atlascore.connectors_sdk.fetcher import SafeFetcher
 from atlascore.connectors_sdk.types import FetchOutcome, Observation, ParsedSeries
 from atlascore.core.errors import ConfigError
@@ -35,6 +35,7 @@ class FredConnector(Connector):
 
     name = "fred"
     accepted_mime_types = frozenset({"application/json", "text/json"})
+    output_kind = OutputKind.TIMESERIES
 
     def fetch(self, fetcher: SafeFetcher, ctx: FetchContext) -> FetchOutcome:
         series_id = ctx.params.get("series_id")

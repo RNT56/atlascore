@@ -40,6 +40,7 @@ deep-dive instead.
 | [0017](0017-b7-mcp-server-search-documents-and-audit-log.md) | B7 MCP server: `search_documents` (reuses B6 path, capped, sanitized, audited) + `audit_log` table (no FKs, sanitized `detail`) over stdio | Accepted | 2026-06-04 | R14 (B7 MCP/§2.11/§13/§14) |
 | [0018](0018-b8-source-health-freshness-and-digest.md) | B8 freshness/health: `source_health` + pure status classifier, CLI-driven `refresh` (no scheduler yet), `get_source_health` (secret-free, audited), digest delivery seam | Accepted | 2026-06-04 | R7 (B8 health/§2.12/§2.5/§17) |
 | [0019](0019-b9-time-series-fred-connector-and-macro-series.md) | B9 macro time-series: partitioned `time_series_point` (composite PK, NULLS NOT DISTINCT), FRED connector + `params`/credential resolve, access-method dispatch, `get_macro_series` | Accepted | 2026-06-04 | R1 (B9 macro/§2.7/§2.2/§14) |
+| [0020](0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md) | B10 SEC + NVD document connectors: `Connector.output_kind` dispatch (document vs timeseries), reuse the B5 document pipeline; SEC basic + NVD keyless | Accepted | 2026-06-04 | — (B10 connectors/§7.3/§7.4) |
 
 > ADRs 0001–0011 encode the canonical-spec resolutions R1–R8 plus the naming and
 > MCP-surface decisions: R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008,
