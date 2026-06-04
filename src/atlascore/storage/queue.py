@@ -14,12 +14,12 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import Session
 
 from atlascore.schemas.crawl_job import JobStatus, JobType
 from atlascore.security.secrets import sanitize_for_storage
-from atlascore.storage.postgres.models import CrawlJob
+from atlascore.storage.postgres.models import CrawlJob, Source
 
 DEFAULT_MAX_ATTEMPTS = 5
 DEFAULT_VISIBILITY_TIMEOUT = timedelta(minutes=15)
@@ -161,3 +161,15 @@ def dead_jobs(session: Session, *, limit: int = 100) -> list[CrawlJob]:
         .limit(limit)
     )
     return list(session.scalars(stmt))
+
+
+def dead_job_summary(session: Session) -> list[tuple[str, str, int]]:
+    """DLQ depth grouped as ``(source_name, job_type, count)`` (powers `atlas health`/`digest`)."""
+    rows = session.execute(
+        select(Source.name, CrawlJob.job_type, func.count())
+        .join(Source, Source.id == CrawlJob.source_id)
+        .where(CrawlJob.status == JobStatus.DEAD.value)
+        .group_by(Source.name, CrawlJob.job_type)
+        .order_by(func.count().desc())
+    ).all()
+    return [(name, job_type, count) for name, job_type, count in rows]

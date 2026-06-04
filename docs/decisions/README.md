@@ -38,6 +38,7 @@ deep-dive instead.
 | [0015](0015-b5-parse-pipeline-and-nh3-sanitizer.md) | B5 parse pipeline: network-free parse, last-write-wins `document` upsert, nh3 HTML sanitizer | Accepted | 2026-06-04 | R2 (B5 parser/§2.4/§14) |
 | [0016](0016-b6-fts-query-path-and-search-contract.md) | B6 full-text search: `'simple'`-config FTS over `document`, `websearch_to_tsquery` + `ts_rank`, static parameterized SQL, index-usage regression | Accepted | 2026-06-04 | — (B6 search/§2.4/§13/§15) |
 | [0017](0017-b7-mcp-server-search-documents-and-audit-log.md) | B7 MCP server: `search_documents` (reuses B6 path, capped, sanitized, audited) + `audit_log` table (no FKs, sanitized `detail`) over stdio | Accepted | 2026-06-04 | R14 (B7 MCP/§2.11/§13/§14) |
+| [0018](0018-b8-source-health-freshness-and-digest.md) | B8 freshness/health: `source_health` + pure status classifier, CLI-driven `refresh` (no scheduler yet), `get_source_health` (secret-free, audited), digest delivery seam | Accepted | 2026-06-04 | R7 (B8 health/§2.12/§2.5/§17) |
 
 > ADRs 0001–0011 encode the canonical-spec resolutions R1–R8 plus the naming and
 > MCP-surface decisions: R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008,

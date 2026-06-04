@@ -58,6 +58,23 @@ def load_connector(ref: str) -> Connector:
     return cast("Connector", cls())
 
 
+def fetch_worker_active(session: Session) -> bool:
+    """True if some process currently holds the fetch advisory lock (a fetch worker is running).
+
+    Inspects ``pg_locks`` without acquiring the lock. A 64-bit advisory key is split across
+    ``classid`` (high 32 bits) and ``objid`` (low 32 bits) with ``objsubid=1`` (the
+    ``pg_try_advisory_lock(bigint)`` form). Read-only liveness for `atlas health` / `atlas digest`.
+    """
+    held = session.scalar(
+        text(
+            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+            "AND classid = :hi AND objid = :lo AND objsubid = 1"
+        ),
+        {"hi": FETCH_LOCK_KEY >> 32, "lo": FETCH_LOCK_KEY & 0xFFFFFFFF},
+    )
+    return bool(held)
+
+
 @contextmanager
 def fetch_worker_lock(engine: Engine) -> Iterator[None]:
     """Single-fetch-worker guard (R16): a pg advisory lock held for the fetch operation.

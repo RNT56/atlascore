@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 from atlascore.mcp_server.server import (
+    HEALTH_LIMIT_DEFAULT,
+    HEALTH_LIMIT_MAX,
     SEARCH_LIMIT_DEFAULT,
     SEARCH_LIMIT_MAX,
+    TOOL_GET_SOURCE_HEALTH,
     TOOL_SEARCH_DOCUMENTS,
     build_mcp_server,
 )
 
 __all__ = [
+    "HEALTH_LIMIT_DEFAULT",
+    "HEALTH_LIMIT_MAX",
     "SEARCH_LIMIT_DEFAULT",
     "SEARCH_LIMIT_MAX",
+    "TOOL_GET_SOURCE_HEALTH",
     "TOOL_SEARCH_DOCUMENTS",
     "build_mcp_server",
 ]

@@ -405,6 +405,8 @@ When no summary exists and none can be produced:
 
 **Safety notes.** **No secrets and no internal hostnames** in output — `base_url`, `credential_ref`, and private endpoints are never returned; only the human-readable source name and health metrics. This is a status mirror; it cannot trigger a crawl, change policy, or enable/disable a source. Audited as `tool_name=get_source_health`.
 
+> **Implemented (B8) — `atlascore.mcp_server` + migration `0005`** ([ADR 0018](../decisions/0018-b8-source-health-freshness-and-digest.md)). The live tool reads the `source_health` snapshot via `storage.source_health.list_source_health` (a **secret-free** join — source name + slug only; never `base_url`/`credential_ref`/hostname). **Implemented input:** `sources` (source **slugs**), `status` (`ok|warn|stale|error|cooling_down`), `limit` (1–**200**, default 100). Each result carries `source`, `source_slug`, `source_id`, `status`, the timestamps, `freshness_lag_seconds`, `consecutive_failures`, `success_rate_24h`, `parse_quality`, `duplicate_rate` (null in MVP), `item_count_recent`, `updated_at` + a `truncated` flag. Audited per call (`tool_name=get_source_health`). Reaffirms the architecture rule: this is a read-only mirror; the operational gate is the `atlas health` / `atlas digest` CLI.
+
 ---
 
 ### 2.6 `get_alerts`

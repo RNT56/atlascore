@@ -15,8 +15,10 @@ package, the Alembic harness, and the `source` schema), the **B2 source registry
 default-deny, and the `atlas source` CLI), and the **B3 raw store + job queue** (content-addressed
 raw storage, the `crawl_job` queue, and `sanitize_for_storage`), the **B4 RSS connector +
 SSRF-guarded fetcher + worker**, the **B5 article parser + canonical `document` + parse
-worker**, the **B6 full-text search query path + `atlas search` CLI**, and the **B7 MCP server
-+ `search_documents` + `audit_log` table**. The MVP continues at block **B8**.
+worker**, the **B6 full-text search query path + `atlas search` CLI**, the **B7 MCP server
++ `search_documents` + `audit_log` table**, and the **B8 freshness/health subsystem
+(`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**. The MVP continues
+at block **B9**.
 
 ### Added
 
@@ -252,5 +254,27 @@ secrets-scan, integration).
   secret embedded in the query is redacted in `audit_log.detail`; caps + validation hold) and unit
   tests (CLI help, offline server build + tool contract, hit→payload mapping). Verified end-to-end
   over real stdio with an MCP client driving `atlas mcp dev`.
+
+### Added — B8 (freshness/health: `source_health` + `get_source_health` + digest)
+
+- **`source_health` table** (migration `0005`) — the per-source freshness/health snapshot
+  (docs/schemas §2.12): `HealthStatus` enum + ORM (PK `source_id`, FK RESTRICT, `interval`
+  `freshness_lag`, CHECK-bounded `status`, `btree(status)`). Current snapshot only.
+- **Freshness computation** (`atlascore.worker.freshness`) — `refresh_source_health` computes (over
+  `crawl_job` + `document`) and idempotently upserts each source's health: `freshness_lag = now -
+  coalesce(last_item_published_at, last_success_at)`, classified by the pure, unit-tested
+  `classify_status` (precedence `cooling_down` > `stale` > `warn` > `error` > `ok`;
+  `COOLING_THRESHOLD = 3` consecutive failed fetches). Freshness-critical fields are exact; quality
+  metrics are simple/honest; `duplicate_rate` is null in MVP.
+- **`atlas health`** — on-demand snapshot (recompute → `source_health` + `crawl_job` DLQ depth +
+  fetch-worker liveness via `pg_locks`). **`atlas digest`** — builds the daily summary (non-ok
+  sources + DLQ + liveness) and emits it; B8 delivers to stdout/log (a seam — B13 wires the
+  webhook/ntfy/email channel). Both are control-plane and **MCP-independent**.
+- **`get_source_health`** MCP tool — read-only, **secret-free** mirror (never `base_url`/
+  `credential_ref`/hostnames), filterable by slug/status, capped (`limit ≤ 200`), audited per call
+  ([ADR 0018](docs/decisions/0018-b8-source-health-freshness-and-digest.md)).
+- **Tests** — unit (the `classify_status` matrix; `build_digest` / `_fmt_lag`; CLI help; offline
+  tool registration) and integration (stale/fresh/failing classification; `get_source_health`
+  audited + secret-free; `atlas digest` surfaces a stale source). Verified live + over real stdio.
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

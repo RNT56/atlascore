@@ -738,6 +738,8 @@ CREATE TABLE source_health (
 CREATE INDEX source_health_status_idx ON source_health (status);
 ```
 
+> **Implemented (B8) — migration `0005`** ([ADR 0018](../decisions/0018-b8-source-health-freshness-and-digest.md)). ORM `SourceHealth` + `HealthStatus` enum; FK `ON DELETE RESTRICT`; `freshness_lag` is a Postgres `interval`; `status` CHECK-bounded; `btree(status)`. The freshness computation lives in `worker/freshness.py`: `refresh_source_health` computes (read-only over `crawl_job` + `document`) and idempotently upserts each source's snapshot. Status is derived by the pure `classify_status` (precedence `cooling_down` > `stale` > `warn` > `error` > `ok`; `COOLING_THRESHOLD=3`). `atlas health` / `atlas digest` drive the computation then read it (no scheduler yet); `get_source_health` (MCP) and `storage.source_health.list_source_health` read a **secret-free** view (name + slug only). `duplicate_rate` is null in MVP.
+
 ---
 
 ## 5. Purge Cascade (R3)

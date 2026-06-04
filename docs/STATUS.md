@@ -8,25 +8,32 @@
 
 ## Current phase
 
-**Block B7 — DONE (2026-06-04). Next: B8.**
+**Block B8 — DONE (2026-06-04). Next: B9.**
 
-The read-only **MCP server** (FastMCP over stdio) + the **`audit_log`** table are in place.
-Migration `0004` creates `audit_log` (docs/schemas §2.11): append-only, CHECK-bounded
-`actor`/`retention_class`, `btree(ts)`/`btree(action)`, and **no FKs** (it must outlive purge of
-its referents). All audit writes go through `storage.audit.write_audit_log`, which runs `detail`
-through `sanitize_for_storage` first. `atlascore.mcp_server` exposes **`search_documents`** —
-reusing B6's query path (now extended with provenance columns), returning sanitized snippets + a
-provenance bundle (never raw HTML), capped at `limit ≤ 50`, audited per call. `atlas mcp dev`
-serves it over stdio ([ADR 0017](decisions/0017-b7-mcp-server-search-documents-and-audit-log.md)).
-**Done-when met:** an agent answers with cited results over stdio and the call is audited —
-verified end-to-end with a real MCP stdio client driving `atlas mcp dev`, plus the in-process
-integration test (results + provenance + sanitized audit; a secret in the query is redacted in
-`audit_log.detail`; caps + validation hold). **203 tests pass** (unit + contract + integration on
-a live DB); ruff/mypy clean; migration `0004` applies, reverses, and drift-check empty.
+The **freshness/health subsystem** is in place. Migration `0005` creates `source_health`
+(docs/schemas §2.12): current snapshot, PK `source_id` (FK RESTRICT), `interval` `freshness_lag`,
+CHECK-bounded `status`, `btree(status)`. `worker/freshness.refresh_source_health` computes
+(read-only over `crawl_job` + `document`) + idempotently upserts each source's health;
+`freshness_lag = now - coalesce(last_item_published_at, last_success_at)`, classified by the pure,
+unit-tested `classify_status` (`cooling_down` > `stale` > `warn` > `error` > `ok`;
+`COOLING_THRESHOLD=3`). `atlas health` / `atlas digest` (control-plane, MCP-independent) recompute
+then read source_health + `crawl_job` DLQ depth + fetch-worker liveness; the digest delivers to
+stdout/log (a seam — B13 wires the real channel). The **`get_source_health`** MCP tool is a
+read-only, **secret-free**, audited, capped (`≤200`) mirror
+([ADR 0018](decisions/0018-b8-source-health-freshness-and-digest.md)). **Done-when met:** a stale
+source appears in `source_health`, in `atlas health` / `atlas digest`, and via `get_source_health`
+— verified live (CLI + real stdio MCP) and by integration tests (stale/fresh/failing
+classification; secret-free + audited tool; digest surfaces the stale source). **219 tests pass**;
+ruff/mypy clean; migration `0005` applies, reverses, drift-check empty.
 
 ---
 
 ### Prior phases
+
+**Block B7 — DONE (2026-06-04).** Read-only **MCP server** (FastMCP, stdio) + the **`audit_log`**
+table (migration `0004`; append-only, no FKs, sanitized `detail`). `search_documents` reuses B6's
+query path (sanitized snippet + provenance, never raw HTML, `limit ≤ 50`, audited per call);
+`atlas mcp dev` serves it ([ADR 0017](decisions/0017-b7-mcp-server-search-documents-and-audit-log.md)).
 
 **Block B6 — DONE (2026-06-04).** Postgres FTS **query path** + `atlas search` CLI
 (`storage.search.search_documents`: matches `ix_document_fts` exactly, `ts_rank`, `ts_headline`
@@ -168,43 +175,54 @@ until the current set runs unattended for a month before adding sources or servi
     illustrative spec sketch (single `source` slug; `topics`/`entity_ids` filters deferred to B11).
     Tests: 1 integration (cited results + sanitized audit + secret-redaction regression + caps) + 3
     unit; verified over real stdio with an MCP client. 203 pass total.
+- **B8 — `source_health` + freshness + `get_source_health` + `atlas health` / `atlas digest`
+  (2026-06-04).**
+  - `source_health` table (migration `0005`) + `HealthStatus` enum + ORM (PK `source_id`, FK
+    RESTRICT, `interval` lag, CHECK status, `btree(status)`).
+  - `worker/freshness`: pure `classify_status` (`cooling_down` > `stale` > `warn` > `error` > `ok`,
+    `COOLING_THRESHOLD=3`) + `compute_source_health` + `refresh_source_health` (idempotent upsert).
+  - `get_source_health` MCP tool (read-only, secret-free, capped `≤200`, audited via
+    `write_audit_log`); `storage.source_health.list_source_health` (secret-free view).
+  - `atlas health` / `atlas digest` (control-plane, MCP-independent): recompute → read
+    source_health + DLQ depth (`queue.dead_job_summary`) + fetch-worker liveness
+    (`worker.run.fetch_worker_active` via `pg_locks`); digest delivers to stdout/log (B13 seam).
+  - [ADR 0018](decisions/0018-b8-source-health-freshness-and-digest.md). Tests: 2 unit-files
+    (classify matrix, digest render, CLI, offline tool) + 1 integration; verified live + stdio.
+    219 pass total.
 
 ---
 
 ## In progress
 
-*(none)* — B7 closed. B8 not yet claimed.
+*(none)* — B8 closed. B9 not yet claimed.
 
 ---
 
 ## Next
 
-**B8 — `source_health` + freshness job + `get_source_health` + daily digest + `atlas health` /
-`atlas digest`.**
+**B9 — FRED connector + `time_series_point` + `get_macro_series`.**
 
-B7 shipped the `audit_log` table + the first MCP tool. B8 builds the freshness/health subsystem
-(control-plane-first; the MCP tool is a read-only mirror):
+B8 closed the freshness/health subsystem. B9 adds the first time-series source:
 
-1. The **`source_health` table** (docs/schemas §2.12) — `source_id (pk, fk), last_attempt_at,
-   last_success_at, last_item_published_at, freshness_lag interval, status
-   (ok|warn|stale|error|cooling_down), consecutive_failures, success_rate_24h, parse_quality,
-   duplicate_rate, item_count_recent, updated_at`; index `btree(status)`. Migration `0005` + ORM +
-   schema. Current snapshot only (no history table in MVP).
-2. The **freshness job** (`job_type=freshness`) — computes `freshness_lag = now -
-   coalesce(last_item_published_at, last_success_at)` per source and sets `status` from the source's
-   `freshness` thresholds (`warn_after` → warn, `error_after` → stale/error; a freshness alert is
-   wired when the alert pipeline lands in B13).
-3. **`atlas health`** (source_health + `crawl_job` DLQ depth + scheduler/worker liveness) and
-   **`atlas digest`** (daily digest via the alert delivery channel). Both are **control-plane,
-   MCP-independent** (CLAUDE.md §17 / architecture §7).
-4. **`get_source_health`** MCP tool (docs/mcp §2.5) — read-only mirror; **no secrets / no internal
-   hostnames** in output; capped; audited (reuse `write_audit_log`).
+1. The **`time_series_point` table** (docs/schemas §2.7) — **RANGE-partitioned by `ts`** with a
+   **composite PK `(id, ts)`** (the partitioned-table rule), `UNIQUE NULLS NOT DISTINCT (provider,
+   series_id, ts, vintage)` (PG15+), `kind` discriminator (`observation`|`bar`), nullable OHLCV.
+   Migration `0006` + ORM + schema. **First partitioned table — mind the composite-PK invariant.**
+2. The **FRED connector** (`atlascore.connectors.fred`) — API connector via the SDK lifecycle;
+   `credential_ref` names the `FRED_API_KEY` env key (never the value); honor documented rate
+   limits; **the `?api_key=…` URL must be sanitized before any `crawl_job`/`audit` write** (the
+   `sanitize_for_storage` path already strips URL query/userinfo — verify it covers FRED).
+   Fixtures: success/empty/malformed/rate-limit/drift.
+3. **`get_macro_series`** MCP tool (docs/mcp §2.2) — a series + ordered observations; `value` as a
+   string to preserve `numeric` precision; capped (`≤2000`); audited; never zero-fills gaps.
 
-**Definition of done for B8:** a stale source appears in the digest and in `source_health`, and
-`get_source_health` returns it.
+**Definition of done for B9:** query a macro series via MCP.
 
-Build-order reminder (R10): `get_source_health` reads `source_health`, introduced **here in B8** —
-it must not have been built earlier. Then onward through B15 (B9 FRED + `get_macro_series`, …).
+Build-order reminders: B10 SEC EDGAR + NVD; B11 enrichment + `get_entity_mentions` (also unblocks
+the deferred `search_documents` topic/entity filters); B12 summaries + `get_document_summary`; B13
+the three rule-based alerts + delivery (wires the real digest channel + freshness alerts) +
+`get_alerts`; B14 backups + purge; B15 hardening. The scheduler block (wires the timed
+`job_type=freshness` job + single-scheduler liveness) is still pending.
 
 ---
 
@@ -248,6 +266,18 @@ it must not have been built earlier. Then onward through B15 (B9 FRED + `get_mac
 - **MCP server connects to the DB lazily (B7)** — `atlas mcp dev` starts the stdio server before
   reaching Postgres; the engine is created on the first tool call, so a DB outage surfaces as a tool
   error (`ToolError` to the client), not a startup failure. Intended for a single-operator box.
+- **`atlas health` / `atlas digest` recompute `source_health` on each run (B8)** — there is no
+  scheduler yet, so the CLI drives the freshness computation (compute → read) instead of only
+  reading a job-populated table. Cheap at single-operator scale; when the scheduler block lands it
+  runs the timed `job_type=freshness` job and the CLI can become a pure read. Documented in ADR 0018.
+- **`source_health.duplicate_rate` is null in MVP (B8)** — per-item dedupe outcomes aren't recorded
+  yet, so the column is honestly null rather than fabricated; populated when B13 adds the metric.
+- **Digest delivery is stdout-only (B8)** — `atlas digest` prints/logs the digest; the real
+  `ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP channel and the freshness **alert** are wired in B13. The
+  digest **text** (`build_digest`) is final, so B13 only swaps the transport.
+- **Scheduler-liveness half of the digest is a placeholder (B8)** — only fetch-worker presence is
+  checked (via `pg_locks` on the fetch advisory lock); the single-scheduler liveness check lands
+  with the scheduler block.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
   - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
     creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked
