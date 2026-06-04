@@ -8,7 +8,32 @@
 
 ## Current phase
 
-**Block B11 — DONE (2026-06-04). Next: B12.**
+**Block B12 — DONE (2026-06-04). Next: B13.**
+
+**Cached, cited document summaries are queryable via MCP.** Migration `0008` adds the `summary`
+table (R4 content-hash cache keyed `unique(source_hash, model_name, model_version, prompt_version)`
+over the **ordered** member `content_hash`es; `scope`, `member_doc_ids[]`, `citations`, with
+`GIN(member_doc_ids)` for the R3 purge cascade) — raw SQL, excluded from the drift-check by owning
+table. The summary pipeline (`atlascore.enrichment.summaries`) does **dedupe-before-summarize →
+content-hash cache → compute-on-miss**: an identical `(content, model, prompt)` tuple is **never
+re-summarized**, and a re-parsed member busts the cache. MVP's `local` backend is the deterministic,
+dependency-free **`ExtractiveSummarizer`** (cited lead-sentence extraction, offline/CI); hosted LLMs
+(`LLM_BACKEND=api`) are pluggable behind the `api` extra; `none` ⇒ cache-only. The
+**`get_document_summary`** MCP tool (1–12 ordered docs, `allow_compute`) returns a cited summary
+(`cache=hit|miss`) with member-source provenance, or `summary_text=null` + a reason when nothing is
+cached and no backend is configured (never a hallucination); it computes-on-miss only when a backend
+is set and **writes a `summary` row** then (a documented exception to the audit-only posture, gated
+by `LLM_BACKEND`/`allow_compute`)
+([ADR 0022](decisions/0022-b12-summaries-pipeline-and-content-hash-cache.md)). **Done-when met:** a
+cached, cited summary via MCP, no re-summarization of an identical tuple — verified live (compute →
+cache hit, single/multi scope, content-change bust, cache-only null+reason). **271 tests pass**;
+ruff/mypy clean; migration `0008` applies + drift-check empty on live PG16.
+
+---
+
+### Prior phases
+
+**Block B11 — DONE (2026-06-04).**
 
 **Documents are now enriched and the entity surface is queryable.** Migration `0007` adds the three
 enrichment tables — `entity` (trigram `gin (canonical_name gin_trgm_ops)` + array GINs +
@@ -27,10 +52,6 @@ B7 `search_documents` `topics`/`entity_ids` filters are now wired
 mentions are queryable via `get_entity_mentions` — verified live (enrich → resolve by
 id/name/ticker → mentions with provenance, idempotent re-embed skip, full queue path + CLI).
 **260 tests pass**; ruff/mypy clean; migration `0007` applies + drift-check empty on live PG16.
-
----
-
-### Prior phases
 
 **Block B10 — DONE (2026-06-04).**
 
@@ -257,47 +278,63 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-*(none)* — B11 closed. B12 not yet claimed.
+*(none)* — B12 closed. B13 not yet claimed.
 
 ---
 
 ## Next
 
-**B12 — Summaries pipeline (`SummaryBackend`, content-hash cache, `summary` table) +
-`get_document_summary`.**
+**B13 — Three rule-based alerts (`macro_release` [FRED], `cve_watch` [NVD + vendor RSS],
+`sec_filing` [EDGAR]) + delivery (webhook/ntfy/email) + `get_alerts`.**
 
-B11 enriched documents and added the entity surface. B12 adds cached, cited summaries:
+B12 added cached summaries. B13 adds the alert subsystem (CLAUDE.md §11.10 `alert`, §13 `get_alerts`):
 
-1. **`summary` table** (docs/schemas §2.5) — cached LLM summaries with full provenance:
-   `scope (single|multi)`, `document_id`/`member_doc_ids[]` (ordered), `source_hash` (over ordered
-   member `content_hash`es), `model_name`/`model_version`/`prompt_version`, `summary_text`,
-   `citations` jsonb, `token_cost`. Cache key `unique(source_hash, model_name, model_version,
-   prompt_version)`; `GIN(member_doc_ids)` (required for purge, R3). New migration (raw-SQL GIN like
-   the others, excluded from drift-check by owning table).
-2. **`SummaryBackend` / LLM** (`atlascore.enrichment.summaries`) — `LLM_BACKEND=local|api|none`;
-   `none` ⇒ return only cached summaries, else `null` + reason (never hallucinate). `prompt_version`
-   tracked; content-hash cache; **dedupe before summarize**; cloud egress caveat (§16/§20) + the
-   HARD `LLM_MONTHLY_SPEND_CAP_EUR`. Mirror B11's backend pattern: a deterministic/extractive default
-   so it runs offline, hosted LLMs pluggable behind the `api` extra.
-3. **`get_document_summary`** MCP tool (docs/mcp §2.4) — cached, cited summary of one OR more docs;
-   `LLM_BACKEND`-aware; `null` + reason when nothing cached and backend `none`; capped + audited.
+1. **`alert` table** (docs/schemas §2.10) — `alert_type (macro_release|cve_watch|sec_filing|…)`,
+   `rule_id`, `severity`, `status (open|acknowledged|resolved|purged)`, `title`, `dedupe_key`
+   (unique), `evidence_doc_ids text[]`, `detail` jsonb, `delivered_at`, `delivery_status`. New
+   migration. Lifecycle `open → acknowledged → resolved`; `purged` when all evidence erased (R3).
+2. **Three rule-based alert rules** (`atlascore.alerts.rules`) evaluated by a `job_type=alert` job:
+   `macro_release` (a new FRED observation), `cve_watch` (a new NVD CVE / vendor-RSS advisory),
+   `sec_filing` (a new EDGAR filing). Each fires with a deterministic `dedupe_key` + `evidence_doc_ids`
+   and is idempotent (re-eval never double-fires).
+3. **Delivery** (`atlascore.alerts.delivery`) — webhook / ntfy / SMTP from `.env`
+   (`ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP). **This wires the real digest channel** (B8's digest is
+   stdout-only) and the **freshness alert** (B8 left a seam).
+4. **`get_alerts`** MCP tool (docs/mcp §2.6) — recent alerts + `evidence_doc_ids`, read-only,
+   capped, audited.
+5. **`atlas alerts run`** CLI (control-plane) to evaluate rules + deliver.
 
-**Definition of done for B12:** a cached, cited summary via MCP; no re-summarization of an identical
-tuple.
+**Definition of done for B13:** each alert fires with dedupe + `evidence_doc_ids` and is queryable
+via MCP.
 
-Build-order reminders: B13 the three rule-based alerts + delivery (wires the real digest channel +
-freshness alerts) + `get_alerts` (the SEC/NVD connectors power `sec_filing`/`cve_watch`; FRED powers
-`macro_release`); B14 backups + purge (the R3 cascade now spans `embedding`/`mention`/`entity` from
-B11 + `summary` from B12 — incl. the multi-doc summary regression); B15 hardening. Still pending:
-the **scheduler** block (timed `job_type=freshness` + the daily FRED/EDGAR/NVD fetches + the
+Build-order reminders: B14 backups + restore drill + `atlas purge` (the R3 cascade now spans
+`embedding`/`mention`/`entity` (B11) + `summary` (B12, incl. the multi-doc summary regression) +
+`alert.evidence_doc_ids` (B13)); B15 hardening + README + end-to-end smoke/demo. Still pending: the
+**scheduler** block (timed `freshness`/`alert` jobs + the daily FRED/EDGAR/NVD fetches + the
 fetch→parse→enrich worker loop + single-scheduler liveness), `time_series_point` **yearly
-partitions**, SEC full-filing (Tika) + NVD keyed tier, and a **real embedding backend**
-(sentence-transformers/cloud) to replace the deterministic hashing baseline.
+partitions**, SEC full-filing (Tika) + NVD keyed tier, a **real embedding backend**
+(sentence-transformers/cloud), and a **real LLM summary backend** (`LLM_BACKEND=api` + spend-cap
+enforcement) to replace the deterministic baselines.
 
 ---
 
 ## Known issues
 
+- **B12 summary backend is a deterministic extractive baseline (by design; ADR 0022).** The
+  `local` backend (`ExtractiveSummarizer`) takes each document's leading sentence(s) and cites them
+  to the internal doc id — useful and honest, but **not an abstractive narrative** until a real
+  local/hosted LLM is wired. `LLM_BACKEND=api` (hosted models), the **hard
+  `LLM_MONTHLY_SPEND_CAP_EUR` enforcement** (degrade-to-cache-only over cap), and the cloud-egress
+  controls are **deferred** to when the `api` backend lands (`api` currently raises a clear
+  `ConfigError`). Default `LLM_BACKEND=none` ⇒ `get_document_summary` is cache-only.
+- **`get_document_summary` writes a `summary` row on compute (documented exception).** docs/mcp §1
+  says MCP "writes only audit_log", but §2.4/§4 specify compute-on-miss; the tool follows the
+  specific contract. With the default `LLM_BACKEND=none` it is cache-only (no summary writes); a
+  write happens only once a backend is configured and `allow_compute` is true. Documented in
+  [ADR 0022](decisions/0022-b12-summaries-pipeline-and-content-hash-cache.md).
+- **No `atlas summarize` CLI in MVP.** Summaries are produced via `get_document_summary`
+  (`allow_compute=true` warms the cache); there is no control-plane summary command (not in
+  CLAUDE.md §9). A pre-warm CLI is a possible later convenience.
 - **B11 enrichment backends are deterministic baselines (by design; ADR 0021).** The `local`
   embedding backend is a **hashing vectorizer** (lexical overlap, not semantics) — a real ANN
   ranking needs the pluggable sentence-transformers/cloud backend wired (a localized change; same

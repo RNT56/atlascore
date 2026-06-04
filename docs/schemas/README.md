@@ -388,6 +388,8 @@ CREATE INDEX summary_document_idx    ON summary (document_id);
 CREATE INDEX summary_member_ids_idx  ON summary USING gin (member_doc_ids);  -- purge must scan this
 ```
 
+> **Implemented (B12) — migration `0008`** ([ADR 0022](../decisions/0022-b12-summaries-pipeline-and-content-hash-cache.md)). Raw SQL (the `GIN(member_doc_ids)` array index doesn't round-trip through autogenerate); excluded from the drift-check by owning table. `storage.summaries` computes `source_hash` over the ordered member `content_hash`es, looks up / inserts on the R4 cache key (idempotent `ON CONFLICT DO NOTHING`), and the `enrichment.summaries` pipeline computes-on-miss only when a `SummaryBackend` is configured (`LLM_BACKEND`). MVP's `local` backend is the deterministic `ExtractiveSummarizer` (cited lead-sentence extraction); hosted LLMs are pluggable behind the `api` extra. `citations` map each claim to the **internal** `document.id` (never an external URL).
+
 ---
 
 ### 2.6 embedding

@@ -14,6 +14,7 @@ from atlascore.storage.postgres.models.mention import Mention
 from atlascore.storage.postgres.models.raw_document import RawDocument
 from atlascore.storage.postgres.models.source import Source
 from atlascore.storage.postgres.models.source_health import SourceHealth
+from atlascore.storage.postgres.models.summary import Summary
 from atlascore.storage.postgres.models.time_series_point import TimeSeriesPoint
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "RawDocument",
     "Source",
     "SourceHealth",
+    "Summary",
     "TimeSeriesPoint",
 ]

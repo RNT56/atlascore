@@ -51,8 +51,9 @@ _MANUAL_INDEXES = frozenset(
 #   - ``entity``    — trigram ``gin (canonical_name gin_trgm_ops)`` + array GINs (need pg_trgm)
 #   - ``mention``   — for DDL consistency with its siblings
 #   - ``embedding`` — ``pgvector vector(N)`` column + HNSW ANN index
-# The ORM models map their columns for querying/upserts only; the real DDL lives in migration 0007.
-_RAW_SQL_TABLES = frozenset({"entity", "mention", "embedding"})
+#   - ``summary``   — ``GIN(member_doc_ids)`` array index (migration 0008)
+# The ORM models map their columns for querying/upserts only; the real DDL lives in the migrations.
+_RAW_SQL_TABLES = frozenset({"entity", "mention", "embedding", "summary"})
 
 
 def _is_raw_sql_table(table_name: str | None) -> bool:

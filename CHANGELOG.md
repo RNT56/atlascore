@@ -19,13 +19,34 @@ worker**, the **B6 full-text search query path + `atlas search` CLI**, the **B7 
 + `search_documents` + `audit_log` table**, the **B8 freshness/health subsystem
 (`source_health` + `get_source_health` + `atlas health` / `atlas digest`)**, the **B9 macro
 time-series (`time_series_point` + FRED connector + `get_macro_series`)**, the **B10 SEC EDGAR
-+ NVD document connectors**, and the **B11 enrichment subsystem (language → NER → topics →
-embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**. The MVP continues at
-block **B12**.
++ NVD document connectors**, the **B11 enrichment subsystem (language → NER → topics →
+embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**, and the **B12 summaries
+pipeline (`summary` table + content-hash cache + `get_document_summary`)**. The MVP continues at
+block **B13**.
 
 ### Added
 
-- **B11 — enrichment pipeline + entity surface** ([ADR 0021](docs/decisions/0021-b11-enrichment-entity-mention-embedding.md)).
+- **B12 — summaries pipeline + cited summaries** ([ADR 0022](docs/decisions/0022-b12-summaries-pipeline-and-content-hash-cache.md)).
+  - **`summary` table** (migration `0008`, raw SQL): R4 content-hash cache keyed
+    `unique(source_hash, model_name, model_version, prompt_version)` over the **ordered** member
+    `content_hash`es; `scope (single|multi)`, `document_id` (null for multi), `member_doc_ids[]`,
+    `citations` jsonb, `token_cost`, with `GIN(member_doc_ids)` for the R3 purge cascade. Excluded
+    from the autogenerate drift-check by owning table.
+  - **`SummaryBackend` + deterministic extractive `local` backend**
+    (`enrichment.summaries.extractive.ExtractiveSummarizer`: lead-sentence extraction, per-claim
+    citations to the **internal** doc id, offline/CI-safe). `LLM_BACKEND=none` → cache-only;
+    `local` → extractive; `api` (hosted LLM) raises a clear `ConfigError` (pluggable behind the
+    `api` extra, with the spend-cap / cloud-egress controls deferred to it).
+  - **Summary pipeline** (`enrichment.summaries.pipeline.summarize_documents`): dedupe-before-
+    summarize → `source_hash` → content-hash cache (compute-mode keyed to the active backend;
+    cache-only mode = any cached summary for the content) → compute-on-miss + idempotent store.
+    Never re-summarizes an identical `(content, model, prompt)` tuple; a re-parsed member busts the
+    cache.
+  - **`get_document_summary` MCP tool** (docs/mcp §2.4): `document_ids` (1–12, ordered),
+    `allow_compute` (default true). Returns a cited summary (`cache=hit|miss`) with member-source
+    provenance, or `summary_text=null` + a `reason` when `LLM_BACKEND=none`/`allow_compute=false`
+    and nothing is cached (never a hallucination). Computes-on-miss only when a backend is
+    configured; audited.
   - **`entity` / `mention` / `embedding` tables** (migration `0007`, raw SQL like `0006`):
     `entity` (trigram `gin (canonical_name gin_trgm_ops)` + array GINs + `merged_into`), `mention`
     (`btree(entity_id, mentioned_at)` + unique `(entity, document, model_name, model_version)`),
