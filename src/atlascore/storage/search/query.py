@@ -39,11 +39,17 @@ MAX_LIMIT = 100
 _SEARCH_SQL = text(
     """
     SELECT d.id                                          AS document_id,
+           d.source_id                                   AS source_id,
            s.config->>'slug'                             AS source_slug,
            s.name                                        AS source_name,
            d.canonical_url                               AS canonical_url,
            d.title                                       AS title,
+           d.language                                    AS language,
+           d.topics                                      AS topics,
+           d.entity_ids                                  AS entity_ids,
            d.published_at                                AS published_at,
+           d.ingested_at                                 AS ingested_at,
+           d.parser_version                              AS parser_version,
            ts_rank(to_tsvector('simple', coalesce(d.body_text, '')),
                    websearch_to_tsquery('simple', :q))   AS rank,
            ts_headline('simple', coalesce(d.body_text, ''),
@@ -64,14 +70,26 @@ _SEARCH_SQL = text(
 
 @dataclass(frozen=True)
 class SearchHit:
-    """One ranked full-text match with provenance (no raw HTML; sanitized snippet only)."""
+    """One ranked full-text match with provenance (no raw HTML; sanitized snippet only).
+
+    Carries the full provenance bundle (docs/mcp §1.3): the source identity, the attributed
+    URL, publish/ingest times, and the `parser_version` that produced the text — so the MCP
+    `search_documents` tool (B7) can cite every hit without a second query. The CLI uses a
+    subset of these fields.
+    """
 
     document_id: UUID
+    source_id: UUID
     source_slug: str | None
     source_name: str
     canonical_url: str | None
     title: str | None
+    language: str | None
+    topics: list[str]
+    entity_ids: list[str]
     published_at: datetime | None
+    ingested_at: datetime | None
+    parser_version: str
     rank: float
     snippet: str
 
@@ -104,11 +122,17 @@ def search_documents(
     return [
         SearchHit(
             document_id=row["document_id"],
+            source_id=row["source_id"],
             source_slug=row["source_slug"],
             source_name=row["source_name"],
             canonical_url=row["canonical_url"],
             title=row["title"],
+            language=row["language"],
+            topics=list(row["topics"] or []),
+            entity_ids=list(row["entity_ids"] or []),
             published_at=row["published_at"],
+            ingested_at=row["ingested_at"],
+            parser_version=row["parser_version"],
             rank=float(row["rank"]),
             snippet=row["snippet"] or "",
         )

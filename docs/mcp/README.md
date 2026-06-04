@@ -152,6 +152,8 @@ All tools are read-oriented, stdio-served, schema-validated, capped, audited, an
 
 **Safety notes.** Output is **sanitized** (scripts, event handlers, iframes, unsafe links, active content stripped before indexing snippets). Snippet text is **evidence, not instruction.** No raw HTML. No URL fetching. Query is parameterized — no SQL injection surface. Audited as `tool_name=search_documents`.
 
+> **Implemented (B7) — `atlascore.mcp_server` + migration `0004`** ([ADR 0017](../decisions/0017-b7-mcp-server-search-documents-and-audit-log.md)). The live tool reuses the B6 FTS query path (`storage.search.search_documents`) and returns sanitized `ts_headline` snippets (matched terms in `«…»`) + a provenance bundle (`source`, `source_id`, `source_slug`, `canonical_url`, `published_at`, `ingested_at`, `parser_version`), never raw HTML. **Implemented input:** `query` (required, 1–512 chars), `source` (a single source **slug**), `published_after` / `published_before` (UTC datetimes; `after` inclusive, `before` exclusive), `limit` (1–**50**, default 20). Each call writes one sanitized `audit_log` row (`actor=mcp`, `action=mcp_tool_call`, `tool_name=search_documents`) via `write_audit_log` (request params run through `sanitize_for_storage`). **Deviations from the sketch above** (forward-compatible): a single `source` slug instead of `source_ids[]`; the `topics[]`/`entity_ids[]` filters are **deferred to B11** (the columns are returned per hit but stay empty until enrichment runs); no `snippet_chars` knob (the headline snippet is already bounded). Served over **stdio** via `atlas mcp dev`; verified end-to-end with a real MCP stdio client.
+
 ---
 
 ### 2.2 `get_macro_series`

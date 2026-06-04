@@ -686,6 +686,8 @@ CREATE INDEX audit_log_ts_idx     ON audit_log (ts);
 CREATE INDEX audit_log_action_idx ON audit_log (action);
 ```
 
+> **Implemented (B7) — migration `0004`** ([ADR 0017](../decisions/0017-b7-mcp-server-search-documents-and-audit-log.md)). ORM `AuditLog` + `Actor`/`RetentionClass` enums (`schemas/audit_log.py`); CHECK constraints on `actor` and `retention_class`; `ts` defaults to DB `now()`; `detail` defaults to `'{}'::jsonb`. **No foreign keys** by design — the append-only log must outlive purge/deletion of the rows it references (`source_id`, and `target_ref`, which is `text` precisely so a purged doc's hash-only entry still stands). All writes go through `storage.audit.write_audit_log`, which runs `detail` through `sanitize_for_storage` before it reaches the column (§14). The B7 MCP server writes one `routine` row per tool call; the purge path (B14) writes retained `purge` rows.
+
 ---
 
 ### 2.12 source_health

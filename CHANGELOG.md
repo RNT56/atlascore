@@ -15,8 +15,8 @@ package, the Alembic harness, and the `source` schema), the **B2 source registry
 default-deny, and the `atlas source` CLI), and the **B3 raw store + job queue** (content-addressed
 raw storage, the `crawl_job` queue, and `sanitize_for_storage`), the **B4 RSS connector +
 SSRF-guarded fetcher + worker**, the **B5 article parser + canonical `document` + parse
-worker**, and the **B6 full-text search query path + `atlas search` CLI**. The MVP continues
-at block **B7**.
+worker**, the **B6 full-text search query path + `atlas search` CLI**, and the **B7 MCP server
++ `search_documents` + `audit_log` table**. The MVP continues at block **B8**.
 
 ### Added
 
@@ -229,5 +229,28 @@ secrets-scan, integration).
   snippet + provenance, and an `EXPLAIN`-with-`enable_seqscan=off` regression asserting
   `ix_document_fts` is used) and unit tests for the CLI (help, clean exit without a DB, malformed
   `--since` rejection, UTC date normalization).
+
+### Added — B7 (MCP server + `search_documents` + `audit_log` table)
+
+- **`audit_log` table** (migration `0004`) — the append-only audit trail (docs/schemas §2.11):
+  `Actor`/`RetentionClass` enums, an ORM model with CHECK constraints and `btree(ts)`/`btree(action)`
+  indexes, and **no foreign keys** by design (the log must outlive purge of the `source_id`/
+  `target_ref` it references; `target_ref` is text). `retention_class='purge'` entries are retained;
+  `routine` rotates (R14).
+- **`atlascore.storage.audit.write_audit_log`** — the single sanitized audit write path: `detail`
+  passes through `sanitize_for_storage` before it reaches the jsonb column, so no secret can enter
+  the audit trail or its backups (§14).
+- **MCP server** (`atlascore.mcp_server`, FastMCP over **stdio**) exposing **`search_documents`** —
+  reuses the B6 query path (now extended with provenance columns: `source_id`, `language`, `topics`,
+  `entity_ids`, `ingested_at`, `parser_version`), returns ranked **sanitized** snippets + a
+  provenance bundle (never raw HTML, §13), caps `limit ≤ 50` (§2.1), and writes one sanitized
+  `audit_log` row per call (`actor=mcp`, `action=mcp_tool_call`). Input is schema-validated;
+  malformed/oversized input is rejected before any DB work
+  ([ADR 0017](docs/decisions/0017-b7-mcp-server-search-documents-and-audit-log.md)).
+- **`atlas mcp dev`** — run the read-only MCP server over stdio for an MCP client / agent host.
+- **Tests** — an integration test (tool returns cited results; every call audited + sanitized; a
+  secret embedded in the query is redacted in `audit_log.detail`; caps + validation hold) and unit
+  tests (CLI help, offline server build + tool contract, hit→payload mapping). Verified end-to-end
+  over real stdio with an MCP client driving `atlas mcp dev`.
 
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD

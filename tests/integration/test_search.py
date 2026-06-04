@@ -141,10 +141,15 @@ def test_search_query_path(migrated_engine: Engine) -> None:
             # Robust to stray FTS operators (websearch_to_tsquery does not raise).
             assert len(search_documents(session, "rates & | !(", source=SLUG)) == 2
 
-        # The query uses ix_document_fts: with seqscan penalized the planner can only choose
-        # the GIN index if the tsvector expression matches the index expression exactly.
+        # The query uses ix_document_fts iff its tsvector expression is byte-identical to the
+        # index expression. We force the issue deterministically by disabling seq/index/
+        # index-only scans, leaving BITMAP scans as the only option — and the only index that
+        # can produce a bitmap for the `@@` predicate is the GIN ix_document_fts. (Just
+        # penalizing seqscan is not enough on a tiny table: the planner would satisfy `@@` as a
+        # cheap btree Filter instead, which varies with row-count stats and is flaky.)
         with Session(migrated_engine) as session, session.begin():
-            session.execute(text("SET LOCAL enable_seqscan = off"))
+            for knob in ("enable_seqscan", "enable_indexscan", "enable_indexonlyscan"):
+                session.execute(text(f"SET LOCAL {knob} = off"))
             plan = session.execute(
                 text("EXPLAIN (COSTS OFF) " + str(_SEARCH_SQL)),
                 {"q": "rates", "source": None, "since": None, "until": None, "limit": MAX_LIMIT},

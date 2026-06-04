@@ -8,24 +8,31 @@
 
 ## Current phase
 
-**Block B6 — DONE (2026-06-04). Next: B7.**
+**Block B7 — DONE (2026-06-04). Next: B8.**
 
-The Postgres FTS **query path** + `atlas search` CLI are in place (the `ix_document_fts` index
-itself shipped in B5's migration `0003`). `atlascore.storage.search.search_documents` matches the
-index expression exactly (`to_tsvector('simple', coalesce(body_text,'')) @@
-websearch_to_tsquery('simple', :q)`), ranks by `ts_rank`, returns a `ts_headline` snippet (`«…»`
-markers) + provenance (source, canonical URL, published date, doc id, rank), filters by source
-slug / `--since` / `--until`, and caps results (`MAX_LIMIT=100`). The SQL is static + fully
-parameterized (filters via `CAST(:p AS …) IS NULL OR …`) — no injection surface
-([ADR 0016](decisions/0016-b6-fts-query-path-and-search-contract.md)). **Done-when met:** search
-by text / date / source from the CLI, verified live against Postgres 16; an
-`EXPLAIN`-with-`enable_seqscan=off` regression asserts `ix_document_fts` is actually used. **199
-tests pass** (unit + contract + integration on a live DB); ruff/mypy clean; autogenerate
-drift-check empty (no schema change in B6).
+The read-only **MCP server** (FastMCP over stdio) + the **`audit_log`** table are in place.
+Migration `0004` creates `audit_log` (docs/schemas §2.11): append-only, CHECK-bounded
+`actor`/`retention_class`, `btree(ts)`/`btree(action)`, and **no FKs** (it must outlive purge of
+its referents). All audit writes go through `storage.audit.write_audit_log`, which runs `detail`
+through `sanitize_for_storage` first. `atlascore.mcp_server` exposes **`search_documents`** —
+reusing B6's query path (now extended with provenance columns), returning sanitized snippets + a
+provenance bundle (never raw HTML), capped at `limit ≤ 50`, audited per call. `atlas mcp dev`
+serves it over stdio ([ADR 0017](decisions/0017-b7-mcp-server-search-documents-and-audit-log.md)).
+**Done-when met:** an agent answers with cited results over stdio and the call is audited —
+verified end-to-end with a real MCP stdio client driving `atlas mcp dev`, plus the in-process
+integration test (results + provenance + sanitized audit; a secret in the query is redacted in
+`audit_log.detail`; caps + validation hold). **203 tests pass** (unit + contract + integration on
+a live DB); ruff/mypy clean; migration `0004` applies, reverses, and drift-check empty.
 
 ---
 
-### Prior phase
+### Prior phases
+
+**Block B6 — DONE (2026-06-04).** Postgres FTS **query path** + `atlas search` CLI
+(`storage.search.search_documents`: matches `ix_document_fts` exactly, `ts_rank`, `ts_headline`
+`«…»` snippet + provenance, source/`--since`/`--until` filters, `MAX_LIMIT=100`; static
+parameterized SQL; `EXPLAIN`-seqscan-off index-usage regression —
+[ADR 0016](decisions/0016-b6-fts-query-path-and-search-contract.md)).
 
 **Block B5 — DONE (2026-06-04).**
 
@@ -149,40 +156,55 @@ until the current set runs unattended for a month before adding sources or servi
   - [ADR 0016](decisions/0016-b6-fts-query-path-and-search-contract.md) records the query contract
     that B7's MCP `search_documents` reuses. Tests: 1 integration (match/rank, filters, cap, snippet,
     provenance, `EXPLAIN`-seqscan-off index-usage regression) + 4 unit (CLI). 199 pass total.
+- **B7 — MCP server + `search_documents` + `audit_log` table + result caps (2026-06-04).**
+  - `audit_log` table (migration `0004`) + `Actor`/`RetentionClass` enums + ORM (no FKs,
+    CHECK-bounded, `btree(ts)`/`btree(action)`); `storage.audit.write_audit_log` sanitizes `detail`
+    via `sanitize_for_storage` at write time (§14).
+  - `atlascore.mcp_server` (FastMCP, stdio) exposing `search_documents`: reuses B6's query path
+    (extended `SearchHit` with `source_id`/`language`/`topics`/`entity_ids`/`ingested_at`/
+    `parser_version`), sanitized snippet + provenance, **no raw HTML**, `limit ≤ 50`, audited per
+    call. `atlas mcp dev` runs it over stdio.
+  - [ADR 0017](decisions/0017-b7-mcp-server-search-documents-and-audit-log.md). Deviations from the
+    illustrative spec sketch (single `source` slug; `topics`/`entity_ids` filters deferred to B11).
+    Tests: 1 integration (cited results + sanitized audit + secret-redaction regression + caps) + 3
+    unit; verified over real stdio with an MCP client. 203 pass total.
 
 ---
 
 ## In progress
 
-*(none)* — B6 closed. B7 not yet claimed.
+*(none)* — B7 closed. B8 not yet claimed.
 
 ---
 
 ## Next
 
-**B7 — MCP server + `search_documents` + `audit_log` table + result caps.**
+**B8 — `source_health` + freshness job + `get_source_health` + daily digest + `atlas health` /
+`atlas digest`.**
 
-B6 settled the FTS query contract (ADR 0016); B7 exposes it to agents over MCP and adds the audit
-trail:
+B7 shipped the `audit_log` table + the first MCP tool. B8 builds the freshness/health subsystem
+(control-plane-first; the MCP tool is a read-only mirror):
 
-1. The **`audit_log` table** (docs/schemas §2.11) — append-only; `id, ts, action, actor, tool_name,
-   source_id, target_ref, detail jsonb, retention_class (default routine)`; `detail` sanitized via
-   `sanitize_for_storage` before write (B3 helper); indexes `btree(ts)`, `btree(action)`. New
-   migration `0004` + ORM model + `DocumentRecord`-style Pydantic schema.
-2. The **MCP server** (`atlascore.mcp_server`, FastMCP over **stdio**) exposing **`search_documents`**
-   — wrap `storage.search.search_documents` with a strict input/output schema, return provenance +
-   sanitized text only (never raw HTML), enforce the same result cap (`MAX_LIMIT`), and write an
-   `audit_log` entry per call (`actor=mcp`, `tool_name=search_documents`).
-3. `atlas mcp dev` to run the server over stdio for development.
-4. Tests: an agent query returns cited results over stdio; the audit entry is written and sanitized.
+1. The **`source_health` table** (docs/schemas §2.12) — `source_id (pk, fk), last_attempt_at,
+   last_success_at, last_item_published_at, freshness_lag interval, status
+   (ok|warn|stale|error|cooling_down), consecutive_failures, success_rate_24h, parse_quality,
+   duplicate_rate, item_count_recent, updated_at`; index `btree(status)`. Migration `0005` + ORM +
+   schema. Current snapshot only (no history table in MVP).
+2. The **freshness job** (`job_type=freshness`) — computes `freshness_lag = now -
+   coalesce(last_item_published_at, last_success_at)` per source and sets `status` from the source's
+   `freshness` thresholds (`warn_after` → warn, `error_after` → stale/error; a freshness alert is
+   wired when the alert pipeline lands in B13).
+3. **`atlas health`** (source_health + `crawl_job` DLQ depth + scheduler/worker liveness) and
+   **`atlas digest`** (daily digest via the alert delivery channel). Both are **control-plane,
+   MCP-independent** (CLAUDE.md §17 / architecture §7).
+4. **`get_source_health`** MCP tool (docs/mcp §2.5) — read-only mirror; **no secrets / no internal
+   hostnames** in output; capped; audited (reuse `write_audit_log`).
 
-**Definition of done for B7:** an agent answers with citations over stdio; the call is audited.
+**Definition of done for B8:** a stale source appears in the digest and in `source_health`, and
+`get_source_health` returns it.
 
-Build-order dependencies to remember (R10): **B7** creates the `audit_log` table and ships
-`search_documents` + result caps; **`get_source_health`, the `source_health` table, and the
-freshness job land in B8** — do NOT implement `get_source_health` before B8 (it reads
-`source_health`, which doesn't exist until then). B8 also adds the daily digest +
-`atlas health` / `atlas digest`. Then onward through B15.
+Build-order reminder (R10): `get_source_health` reads `source_health`, introduced **here in B8** —
+it must not have been built earlier. Then onward through B15 (B9 FRED + `get_macro_series`, …).
 
 ---
 
@@ -217,6 +239,15 @@ freshness job land in B8** — do NOT implement `get_source_health` before B8 (i
 - **Any feed change re-parses all of that feed's items** — the parse `dedupe_key` includes the whole
   raw feed's `content_hash`, so when any item changes, every item gets a fresh (idempotent, cheap)
   parse job. Correct, slightly wasteful; a per-item content key is a possible later refinement.
+- **MCP `search_documents` is narrower than the docs/mcp §2.1 sketch (by design, B7)** — source
+  filtering is a single `source` slug (not `source_ids[]`), and the `topics`/`entity_ids` filters are
+  **deferred to B11** (the columns are returned per hit but stay empty until enrichment runs). The
+  `truncated` flag is a `len(hits) >= limit` heuristic (no separate count query), so it can read
+  `true` when exactly `limit` rows exist with none behind them. Documented in
+  [ADR 0017](decisions/0017-b7-mcp-server-search-documents-and-audit-log.md).
+- **MCP server connects to the DB lazily (B7)** — `atlas mcp dev` starts the stdio server before
+  reaching Postgres; the engine is created on the first tool call, so a DB outage surfaces as a tool
+  error (`ToolError` to the client), not a startup failure. Intended for a single-operator box.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
   - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
     creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked
