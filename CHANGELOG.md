@@ -196,4 +196,18 @@ A multi-agent adversarial review (each finding independently refuted by a skepti
 - **New runtime dependency `nh3`** (ammonia HTML5 sanitizer) — the security boundary for parsed
   body/title text ([ADR 0015](docs/decisions/0015-b5-parse-pipeline-and-nh3-sanitizer.md)).
 
+### Fixed — CI (first-ever run on push to GitHub)
+
+The repository was pushed to GitHub for the first time; the first CI run surfaced two latent
+workflow-config bugs from B1 (never exercised while the repo was empty), both fixed:
+
+- **Workflow failed to compile** — the integration job referenced `${{ runner.temp }}` in a
+  job-level `env:` block, where the `runner` context is unavailable, so GitHub rejected the entire
+  workflow (0 jobs ran). Switched to `${{ github.workspace }}` (valid at job-env scope).
+- **`pip-audit --strict` failed** on the unpublishable local `atlascore` package — now audits the
+  locked **third-party** deps via `uv export --no-emit-project`, keeping `--strict` meaningful.
+
+CI is green on all 8 jobs (lint-format, typecheck, test, audit, migrations, source-yaml,
+secrets-scan, integration).
+
 [Unreleased]: https://example.invalid/atlascore/compare/HEAD
