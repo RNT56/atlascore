@@ -9,7 +9,7 @@ It is **not** a multi-tenant SaaS, **not** a redistribution platform, and **not*
 - **Project / repository / Python distribution name:** `atlascore`
 - **Product / brand name:** AtlasCore *(formerly "AtlasWire" — fully renamed)*
 - **CLI command:** `atlas`
-- **Status:** Pre-MVP / greenfield. The repository is scaffolded with planning, docs, ADRs, and config; application code begins at backlog block **B1**. See [`docs/STATUS.md`](docs/STATUS.md).
+- **Status:** **MVP complete (B1–B15).** Source → ingest → enrich → search → MCP summary → alert runs unattended, with backups + an audited erasure path; `make smoke` proves it end to end and `make security` runs the hardening suite. See [`docs/STATUS.md`](docs/STATUS.md).
 
 ---
 
@@ -30,9 +30,9 @@ Components:
 - **Postgres-backed job queue** (`SELECT ... FOR UPDATE SKIP LOCKED`) with a DLQ status — no external broker.
 - **Immutable raw store** — gzipped, content-addressed payloads on local disk.
 - **One PostgreSQL 16 instance** doing relational + full-text (`tsvector`) + vector (`pgvector`) + partitioned time-series.
-- **Enrichment** — language, NER, topics, embeddings, and cached, cited summaries (local or cloud backends).
-- **Rule-based alerts** with dedupe and evidence document IDs.
-- **Read-only MCP server** over stdio — the 7-tool surface your agents use.
+- **Enrichment** — language, NER, topics, embeddings, and cached, cited summaries. MVP ships deterministic, dependency-free default backends (rule-based NER, hashing embeddings, extractive summaries) so it runs offline; spaCy / sentence-transformers / hosted-LLM backends are pluggable behind optional extras with no schema change.
+- **Rule-based alerts** with dedupe and evidence document IDs, delivered over a webhook / ntfy / SMTP / log channel (which also backs the daily digest).
+- **Read-only MCP server** over stdio — the agent surface your agents use (6 read tools shipped; `get_raw_document` deferred).
 - **A Typer CLI (`atlas`)** — the only ingestion-management surface; agents never trigger crawls or change source policy.
 
 **Architecture rule:** MCP and agents depend on the *processed* stores; the ingestion/control plane must **not** depend on MCP. Health and operations are CLI-driven (`atlas health` / `atlas digest`), not gated through MCP.
@@ -94,11 +94,13 @@ make format      # ruff format
 make lint        # ruff lint
 make typecheck   # mypy / pyright
 make test        # unit + contract + integration (no live network in unit)
-make smoke       # local end-to-end smoke
+make security    # SSRF / sanitizer / secrets-in-columns / prompt-injection regressions
+make smoke       # local end-to-end smoke (source -> ingest -> ... -> alert -> backup -> purge)
 ```
 
-> If a command doesn't exist yet, it lands in its backlog block (see below). The import/packaging
-> layout was finalized in **B1** (ADR 0012): a single `src/atlascore` import root.
+> The import/packaging layout is a single `src/atlascore` import root (ADR 0012). Integration and
+> smoke tests need a reachable Postgres 16 (`make dev`); they skip cleanly when none is present, so
+> `make test` stays green offline (unit + contract only).
 
 ---
 
@@ -152,17 +154,17 @@ Rule: do not add top-level directories without a clear reason.
 - **[`docs/compliance/README.md`](docs/compliance/README.md)** — internal-only posture, honest PII framing, retention classes.
 - **[`docs/mcp/README.md`](docs/mcp/README.md)** — the 7 read-oriented MCP tools.
 - **[`docs/runbooks/README.md`](docs/runbooks/README.md)** — backups/restore, purge, backfill/reindex, secrets at deploy.
-- **[`docs/decisions/`](docs/decisions/)** — ADRs (`0000-template.md`, `0001`–`0011`, plus `README.md` index).
+- **[`docs/decisions/`](docs/decisions/)** — ADRs (`0000-template.md`, `0001`–`0025`, plus `README.md` index).
 
 ---
 
 ## Current status
 
-**Pre-MVP / greenfield — at backlog block B1 (not started).**
+**MVP complete — backlog blocks B1–B15 are done.** See [`docs/STATUS.md`](docs/STATUS.md) for the live board and [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md) §MVP for the backlog.
 
-Planning and the full `docs/` scaffold are in place (dated 2026-06-03). No application code exists yet. The MVP is a single ordered backlog of 15 blocks (B1–B15); B1 is "repo + monorepo skeleton + Docker Compose (Postgres 16 + pgvector) + CI + pre-commit + Alembic harness + `source` schema; finalize the Python import/packaging layout." See [`docs/STATUS.md`](docs/STATUS.md) for the live board and [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md) §MVP for the full backlog.
+The full pipeline works end to end and unattended: an approved source is fetched (SSRF-guarded, conditional), the raw payload is captured immutably, parsed into a canonical `document`, enriched (language → NER → topics → embeddings), indexed for full-text search, summarized (cached + cited), and watched by rule-based alerts — all behind a read-only MCP surface and a `atlas` control-plane CLI, with nightly backups and an audited `atlas purge` erasure path. `make smoke` runs the whole chain; `make security` runs the hardening regressions.
 
-The MCP MVP surface is **all 7 tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`, `get_raw_document`. Scope is frozen until the current set runs unattended for a month.
+The MCP surface ships **6 read tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`. The 7th, `get_raw_document` (the injection-sensitive raw-HTML tool), is intentionally deferred. **Deliberately deferred past the MVP** (see `docs/STATUS.md` Known issues): the timed scheduler/worker loop, real embedding/LLM backends, SEC full-filing (Tika) + NVD keyed tier, an alert watchlist + lifecycle, and `time_series_point` yearly partitions. Scope is frozen until the current set runs unattended for a month.
 
 ---
 

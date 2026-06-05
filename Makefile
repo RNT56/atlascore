@@ -27,7 +27,7 @@ COMPOSE ?= docker compose -f infra/docker-compose.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help setup dev down migrate seed format lint typecheck test \
-        test-unit test-integration smoke audit precommit clean
+        test-unit test-integration security smoke audit precommit clean
 
 help: ## Show this help.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -73,7 +73,10 @@ test-unit: ## Fast: unit + contract only (no DB, no live network).
 test-integration: ## DB / raw-store / search / queue paths (needs `make dev`).
 	$(RUN) pytest -m integration
 
-smoke: ## Local end-to-end smoke: source -> ingest -> search -> MCP summary -> alert.
+security: ## Security regression suite (SSRF / sanitizer / secrets-in-columns / prompt-injection).
+	$(RUN) pytest -m security
+
+smoke: ## Local end-to-end smoke: source -> ingest -> enrich -> search -> MCP summary -> alert -> backup -> purge.
 	$(RUN) pytest -m smoke
 
 audit: ## Dependency vulnerability audit (pip-audit).

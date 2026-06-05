@@ -7,7 +7,7 @@ import pytest
 from atlascore.core.errors import SsrfError
 from atlascore.security.url_safety import assert_url_allowed, is_blocked_ip
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.security]
 
 BLOCKED_IPS = [
     "127.0.0.1",  # loopback

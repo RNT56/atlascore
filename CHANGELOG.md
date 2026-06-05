@@ -22,11 +22,23 @@ time-series (`time_series_point` + FRED connector + `get_macro_series`)**, the *
 + NVD document connectors**, the **B11 enrichment subsystem (language → NER → topics →
 embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**, the **B12 summaries
 pipeline (`summary` table + content-hash cache + `get_document_summary`)**, the **B13 alert
-subsystem (`alert` table + four rule-based alerts + delivery + `get_alerts`)**, and the **B14
-backups + restore drill + `atlas purge` (full R3 erasure cascade)**. The MVP continues at block
-**B15** (the final hardening block).
+subsystem (`alert` table + four rule-based alerts + delivery + `get_alerts`)**, the **B14
+backups + restore drill + `atlas purge` (full R3 erasure cascade)**, and the **B15 hardening +
+end-to-end demo**. **The MVP (B1–B15) is complete; scope is now frozen** (CLAUDE.md §5).
 
 ### Added
+
+- **B15 — hardening + MVP completion** ([ADR 0025](docs/decisions/0025-b15-hardening-and-mvp-completion.md)).
+  - **Security regression suite** (`make security` → `pytest -m security`): a new
+    `tests/unit/test_security_regressions.py` (SSRF incl. DNS-rebinding, HTML active-content strip,
+    secrets-never-in-DB-columns over the `crawl_job`/`audit_log` shapes, prompt-injection-as-evidence,
+    and the read-only 6-tool MCP surface), plus the existing SSRF/sanitizer/secrets suites tagged
+    `security`. The B14 purge multi-doc-summary regression rounds it out.
+  - **End-to-end smoke/demo** (`make smoke` → `pytest -m smoke`): `tests/integration/test_smoke.py`
+    runs source → fetch → parse → enrich → search → cited summary → alert → MCP `get_alerts` →
+    backup → audited purge, unattended, with no live network (respx-mocked feed).
+  - **README** rewritten to the as-built state (6 read MCP tools shipped, deterministic default
+    backends, the deferred-past-MVP list); `make security` target added.
 
 - **B14 — backups + restore drill + `atlas purge` erasure** ([ADR 0024](docs/decisions/0024-b14-purge-cascade-backups-and-restore-drill.md)).
   - **`atlas purge <doc_id|entity_id> --yes`** (`atlascore.storage.purge`): the audited right-to-

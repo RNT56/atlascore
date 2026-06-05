@@ -6,7 +6,7 @@ import pytest
 
 from atlascore.security.sanitization import strip_html
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.security]
 
 
 def test_script_content_is_dropped() -> None:

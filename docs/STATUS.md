@@ -8,7 +8,35 @@
 
 ## Current phase
 
-**Block B14 — DONE (2026-06-05). Next: B15 (the final MVP block).**
+**Block B15 — DONE (2026-06-05). 🎉 MVP COMPLETE (B1–B15). Scope is now frozen (CLAUDE.md §5).**
+
+**The whole pipeline runs unattended, hardened, and demonstrated.** B15 adds the **security
+regression gate** (`make security` → `pytest -m security`): a consolidated
+`tests/unit/test_security_regressions.py` (SSRF incl. DNS-rebinding + metadata + scheme, HTML
+active-content stripping, secrets-never-in-DB-columns over the `crawl_job`/`audit_log` shapes,
+prompt-injection-as-evidence, and the read-only 6-tool MCP surface), with the existing
+SSRF/sanitizer/`sanitize_for_storage` suites also tagged `security` and the B14 purge
+multi-doc-summary regression — **72 security assertions green**. The **end-to-end smoke/demo**
+(`make smoke` → `pytest -m smoke`, `tests/integration/test_smoke.py`) runs the MVP done-when in one
+unattended path with **no live network** (respx feed): register an approved source → fetch (raw
+captured) → parse → enrich → search → cited MCP summary → alert → MCP `get_alerts` → backup → audited
+purge. The README is rewritten to the as-built state (6 read MCP tools shipped, deterministic default
+backends, the deferred-past-MVP list) ([ADR 0025](decisions/0025-b15-hardening-and-mvp-completion.md)).
+**Done-when met:** source → ingest → search → MCP summary → alert runs unattended with backups, and
+the security regressions are green — verified live. **300 tests pass**; ruff/mypy clean; drift-check
+empty on live PG16; no schema change.
+
+**The MVP is complete.** Deferred-past-MVP work (deliberately not started; see Known issues): the
+timed scheduler/worker loop + `audit_log` rotation, real embedding/LLM backends, SEC full-filing
+(Tika) + NVD keyed tier, an alert watchlist + lifecycle CLI, `time_series_point` yearly partitions,
+and the `get_raw_document` MCP tool. Per CLAUDE.md §5, scope is frozen until the current set runs
+unattended for a month.
+
+---
+
+### Prior phases
+
+**Block B14 — DONE (2026-06-05).**
 
 **Backups restore, and the audited erasure path works.** `atlas purge <doc_id|entity_id> --yes`
 (`atlascore.storage.purge`) runs the full R3 cascade in one transaction: `embedding` → `mention` →
@@ -26,10 +54,6 @@ dump into a throwaway scratch DB and verifies it
 restore verified (live drill: 14 tables + rows restored into a scratch DB) and purge works + is
 audited (verified live incl. the multi-doc-summary regression, shared-raw guard, alert reconciliation,
 idempotency). **289 tests pass**; ruff/mypy clean; no schema change (alert was the last table, B13).
-
----
-
-### Prior phases
 
 **Block B13 — DONE (2026-06-04).**
 
@@ -316,34 +340,35 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-*(none)* — B14 closed. B15 not yet claimed.
+*(none)* — **the MVP (B1–B15) is complete.** Scope is frozen (CLAUDE.md §5) until the current set
+runs unattended for a month; the next cycle picks from "Next" below.
 
 ---
 
 ## Next
 
-**B15 — Hardening: security regressions + README + end-to-end smoke/demo (the final MVP block).**
+**MVP complete — scope frozen.** No backlog block is in flight. The deliberately-deferred,
+not-started work (start a cycle by claiming one here, in roughly this order):
 
-B1–B14 built the whole pipeline. B15 hardens and demonstrates it (CLAUDE.md §15 backlog, §19):
+1. **Scheduler / unattended worker loop** — the single-instance scheduler that runs timed
+   `freshness` + `alert` jobs and the daily FRED/EDGAR/NVD fetches, plus a long-running
+   fetch→parse→enrich→alert worker loop (single-fetch-worker + single-scheduler liveness), and the
+   `audit_log` rotation that prunes only `retention_class='routine'` beyond the window. This turns
+   "runs unattended" from a per-command truth into a continuously-running deployment.
+2. **Real enrichment/summary backends** — wire sentence-transformers / cloud embeddings
+   (`EMBEDDING_BACKEND`) and a hosted LLM summary backend (`LLM_BACKEND=api`) with hard
+   `LLM_MONTHLY_SPEND_CAP_EUR` enforcement + cloud-egress controls, replacing the deterministic
+   MVP baselines (interfaces already in place — no schema change for same-dim embeddings).
+3. **Connector depth** — SEC full-filing extraction (sandboxed Tika), NVD keyed `apiKey`-header
+   tier, conditional/incremental fetch for SEC/NVD, and a spaCy NER backend.
+4. **Alert maturity** — a per-issuer / CVSS **watchlist** (so rules fire on *watched* items, not
+   every item) + a lifecycle CLI (acknowledge/resolve).
+5. **`get_raw_document`** — the 7th, injection-sensitive MCP tool (sanitized by default;
+   `include_raw_html=true` audited + wrapped) — R7.
+6. **`time_series_point` yearly partitions** + a partition-management runbook.
 
-1. **Security regression suite** (CLAUDE.md §19.5) — consolidate + extend the SSRF, sanitizer,
-   **secrets-in-logs AND `crawl_job.last_error`/`audit_log.detail` columns**, and prompt-injection
-   regressions into a clear hardening suite (much already exists across B4/B5/B7 — gather + fill
-   gaps), plus confirm the **purge multi-doc-summary** regression (B14) is part of it.
-2. **README** — project overview + quickstart (`make dev`/`migrate`/`seed`, `atlas` tour, the MCP
-   surface), reconciled with the as-built system.
-3. **End-to-end smoke/demo** (`make smoke`) — source → ingest (fetch→parse→enrich) → search → MCP
-   summary → alert, unattended, with a backup + restore, in one runnable path.
-
-**Definition of done for B15:** source → ingest → search → MCP summary → alert runs unattended, with
-backups, and the security regressions are green — completing the MVP (B1–B15).
-
-Still pending after the MVP (post-B15, deliberately deferred — see Known issues): the **scheduler**
-block (timed `freshness`/`alert` jobs + daily FRED/EDGAR/NVD fetches + the fetch→parse→enrich worker
-loop + single-scheduler liveness + the `audit_log` rotation that keeps only `retention_class='purge'`),
-`time_series_point` **yearly partitions**, SEC full-filing (Tika) + NVD keyed tier, a **real embedding
-backend** (sentence-transformers/cloud), a **real LLM summary backend** (`LLM_BACKEND=api` + spend-cap
-enforcement), and an alert **watchlist** + lifecycle CLI (acknowledge/resolve).
+**Operating note:** before adding any new source or service, confirm the current set has run
+unattended for a month (the §5 freeze). Everything above is post-freeze.
 
 ---
 

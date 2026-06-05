@@ -11,7 +11,7 @@ import pytest
 
 from atlascore.security.secrets import REDACTED, sanitize_for_storage
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.security]
 
 # A real secret value that must NEVER survive sanitization, used across cases.
 SECRET = "s3cr3t-VALUE-do-not-leak"
