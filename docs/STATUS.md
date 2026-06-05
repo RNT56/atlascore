@@ -14,22 +14,28 @@
 regression gate** (`make security` → `pytest -m security`): a consolidated
 `tests/unit/test_security_regressions.py` (SSRF incl. DNS-rebinding + metadata + scheme, HTML
 active-content stripping, secrets-never-in-DB-columns over the `crawl_job`/`audit_log` shapes,
-prompt-injection-as-evidence, and the read-only 6-tool MCP surface), with the existing
+prompt-injection-as-evidence, and the read-only 7-tool MCP surface), with the existing
 SSRF/sanitizer/`sanitize_for_storage` suites also tagged `security` and the B14 purge
-multi-doc-summary regression — **72 security assertions green**. The **end-to-end smoke/demo**
+multi-doc-summary regression — **the full `security` suite green**. The **end-to-end smoke/demo**
 (`make smoke` → `pytest -m smoke`, `tests/integration/test_smoke.py`) runs the MVP done-when in one
 unattended path with **no live network** (respx feed): register an approved source → fetch (raw
 captured) → parse → enrich → search → cited MCP summary → alert → MCP `get_alerts` → backup → audited
-purge. The README is rewritten to the as-built state (6 read MCP tools shipped, deterministic default
-backends, the deferred-past-MVP list) ([ADR 0025](decisions/0025-b15-hardening-and-mvp-completion.md)).
+purge. The README is rewritten to the as-built state ([ADR 0025](decisions/0025-b15-hardening-and-mvp-completion.md)).
 **Done-when met:** source → ingest → search → MCP summary → alert runs unattended with backups, and
-the security regressions are green — verified live. **300 tests pass**; ruff/mypy clean; drift-check
-empty on live PG16; no schema change.
+the security regressions are green — verified live.
 
-**The MVP is complete.** Deferred-past-MVP work (deliberately not started; see Known issues): the
-timed scheduler/worker loop + `audit_log` rotation, real embedding/LLM backends, SEC full-filing
-(Tika) + NVD keyed tier, an alert watchlist + lifecycle CLI, `time_series_point` yearly partitions,
-and the `get_raw_document` MCP tool. Per CLAUDE.md §5, scope is frozen until the current set runs
+**B15 polish (2026-06-05):** completed the **full 7-tool MCP surface** by shipping the last tool,
+**`get_raw_document`** (`storage.raw_documents` + the MCP tool): sanitized text by default, verbatim
+raw HTML only behind the gated `include_raw_html=true` flag (wrapped with an untrusted-evidence
+notice + a distinct `mcp_raw_html_returned` audit action), byte-capped by `max_bytes`
+([ADR 0026](decisions/0026-b15-polish-get-raw-document.md)). This closes the only MVP spec gap
+(CLAUDE.md §13 mandates all 7 tools). **306 tests pass**; ruff/mypy clean; drift-check empty on live
+PG16; no schema change.
+
+**The MVP is complete (all 7 MCP tools shipped).** Deferred-past-MVP work (deliberately not started;
+see Known issues): the timed scheduler/worker loop + `audit_log` rotation, real embedding/LLM
+backends, SEC full-filing (Tika) + NVD keyed tier, an alert watchlist + lifecycle CLI, and
+`time_series_point` yearly partitions. Per CLAUDE.md §5, scope is frozen until the current set runs
 unattended for a month.
 
 ---
@@ -363,9 +369,9 @@ not-started work (start a cycle by claiming one here, in roughly this order):
    tier, conditional/incremental fetch for SEC/NVD, and a spaCy NER backend.
 4. **Alert maturity** — a per-issuer / CVSS **watchlist** (so rules fire on *watched* items, not
    every item) + a lifecycle CLI (acknowledge/resolve).
-5. **`get_raw_document`** — the 7th, injection-sensitive MCP tool (sanitized by default;
-   `include_raw_html=true` audited + wrapped) — R7.
-6. **`time_series_point` yearly partitions** + a partition-management runbook.
+5. **`time_series_point` yearly partitions** + a partition-management runbook.
+
+*(The 7th MCP tool, `get_raw_document`, was completed in the B15 polish pass — no longer pending.)*
 
 **Operating note:** before adding any new source or service, confirm the current set has run
 unattended for a month (the §5 freeze). Everything above is post-freeze.

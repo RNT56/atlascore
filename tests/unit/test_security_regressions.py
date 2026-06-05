@@ -22,8 +22,9 @@ from atlascore.security.url_safety import assert_url_allowed, is_blocked_ip
 
 pytestmark = [pytest.mark.unit, pytest.mark.security]
 
-# The MVP MCP surface (docs/mcp §2). All are READ tools; `get_raw_document` (the 7th, injection-
-# sensitive) is intentionally not shipped yet. No tool mutates anything but its own audit row.
+# The full 7-tool MVP MCP surface (docs/mcp §2). All are READ tools; `get_raw_document` is the
+# injection-sensitive one (sanitized by default, raw HTML only behind its audited flag). No tool
+# mutates anything but its own audit row.
 _SHIPPED_TOOLS = {
     "search_documents",
     "get_source_health",
@@ -31,6 +32,7 @@ _SHIPPED_TOOLS = {
     "get_entity_mentions",
     "get_document_summary",
     "get_alerts",
+    "get_raw_document",
 }
 
 
@@ -140,9 +142,11 @@ def test_mcp_surface_is_read_only_and_matches_mvp() -> None:
     server = build_mcp_server()  # no engine → no DB touched while listing
     tools = asyncio.run(server.list_tools())
     names = {t.name for t in tools}
-    assert names == _SHIPPED_TOOLS
-    # No raw-HTML tool is exposed in the MVP, and no tool name implies a write/mutation.
-    assert "get_raw_document" not in names
+    assert names == _SHIPPED_TOOLS  # exactly the 7 MVP tools
+    # No tool name implies a write/mutation — the surface is read-only.
     assert not any(
         verb in n for n in names for verb in ("create", "delete", "update", "purge", "write", "set")
     )
+    # The injection-sensitive raw tool is sanitized BY DEFAULT (raw HTML only behind the flag).
+    raw = next(t for t in tools if t.name == "get_raw_document")
+    assert raw.inputSchema["properties"]["include_raw_html"]["default"] is False

@@ -24,9 +24,19 @@ embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**, the **B1
 pipeline (`summary` table + content-hash cache + `get_document_summary`)**, the **B13 alert
 subsystem (`alert` table + four rule-based alerts + delivery + `get_alerts`)**, the **B14
 backups + restore drill + `atlas purge` (full R3 erasure cascade)**, and the **B15 hardening +
-end-to-end demo**. **The MVP (B1–B15) is complete; scope is now frozen** (CLAUDE.md §5).
+end-to-end demo + the final `get_raw_document` MCP tool**. **The MVP (B1–B15) is complete with the
+full 7-tool MCP surface; scope is now frozen** (CLAUDE.md §5).
 
 ### Added
+
+- **B15 polish — `get_raw_document` (the 7th MCP tool, completing the surface)** ([ADR 0026](docs/decisions/0026-b15-polish-get-raw-document.md)).
+  - `atlascore.storage.raw_documents` + the `get_raw_document` MCP tool (docs/mcp §2.7, R7): resolve
+    by `document_id` (preferred) or `raw_document_id`; **sanitized text by default**
+    (`content_kind=sanitized_text`), or the **verbatim raw payload** with `include_raw_html=true`
+    (`content_kind=raw_html`) wrapped in an untrusted-evidence notice. Byte-capped by `max_bytes`
+    (1 KiB–1 MiB, default 256 KiB). Every call is audited; the raw-HTML path uses a distinct
+    `action=mcp_raw_html_returned`. **No other tool ever returns raw HTML.** The MCP surface now
+    ships **all 7 MVP tools**.
 
 - **B15 — hardening + MVP completion** ([ADR 0025](docs/decisions/0025-b15-hardening-and-mvp-completion.md)).
   - **Security regression suite** (`make security` → `pytest -m security`): a new

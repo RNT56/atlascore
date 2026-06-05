@@ -27,3 +27,6 @@ class RetentionClass(StrEnum):
 
 # Canonical MCP tool-call audit action (docs/mcp §1.4).
 MCP_TOOL_CALL = "mcp_tool_call"
+# Distinct action when `get_raw_document` emits UNSANITIZED raw HTML (the injection-sensitive path,
+# docs/mcp §2.7 / R7) — recorded so raw-HTML disclosures are independently auditable.
+MCP_RAW_HTML_RETURNED = "mcp_raw_html_returned"

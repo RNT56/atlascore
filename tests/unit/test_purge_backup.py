@@ -33,7 +33,8 @@ def test_rawstore_delete_idempotent(tmp_path: Path) -> None:
 
 def test_pg_dump_plan_keeps_password_out_of_argv() -> None:
     plan = build_pg_dump_plan(
-        "postgresql+psycopg://atlas:s3cr%40t@db.host:5433/atlascore", Path("out.dump")
+        "postgresql+psycopg://atlas:s3cr%40t@db.host:5433/atlascore",  # pragma: allowlist secret
+        Path("out.dump"),
     )
     assert plan.dbname == "atlascore"
     assert plan.argv[0] == "pg_dump"
@@ -42,7 +43,7 @@ def test_pg_dump_plan_keeps_password_out_of_argv() -> None:
     assert plan.argv[host_at : host_at + 2] == ["--host", "db.host"]
     assert "--port" in plan.argv and "5433" in plan.argv
     # The password is URL-decoded and ONLY in the env (never on the command line) - §14.
-    assert plan.env["PGPASSWORD"] == "s3cr@t"
+    assert plan.env["PGPASSWORD"] == "s3cr@t"  # pragma: allowlist secret
     assert not any("s3cr@t" in a for a in plan.argv)
 
 

@@ -32,7 +32,7 @@ Components:
 - **One PostgreSQL 16 instance** doing relational + full-text (`tsvector`) + vector (`pgvector`) + partitioned time-series.
 - **Enrichment** — language, NER, topics, embeddings, and cached, cited summaries. MVP ships deterministic, dependency-free default backends (rule-based NER, hashing embeddings, extractive summaries) so it runs offline; spaCy / sentence-transformers / hosted-LLM backends are pluggable behind optional extras with no schema change.
 - **Rule-based alerts** with dedupe and evidence document IDs, delivered over a webhook / ntfy / SMTP / log channel (which also backs the daily digest).
-- **Read-only MCP server** over stdio — the agent surface your agents use (6 read tools shipped; `get_raw_document` deferred).
+- **Read-only MCP server** over stdio — the full 7-tool agent surface (sanitized by default; raw HTML only via the gated, audited `get_raw_document`).
 - **A Typer CLI (`atlas`)** — the only ingestion-management surface; agents never trigger crawls or change source policy.
 
 **Architecture rule:** MCP and agents depend on the *processed* stores; the ingestion/control plane must **not** depend on MCP. Health and operations are CLI-driven (`atlas health` / `atlas digest`), not gated through MCP.
@@ -164,7 +164,7 @@ Rule: do not add top-level directories without a clear reason.
 
 The full pipeline works end to end and unattended: an approved source is fetched (SSRF-guarded, conditional), the raw payload is captured immutably, parsed into a canonical `document`, enriched (language → NER → topics → embeddings), indexed for full-text search, summarized (cached + cited), and watched by rule-based alerts — all behind a read-only MCP surface and a `atlas` control-plane CLI, with nightly backups and an audited `atlas purge` erasure path. `make smoke` runs the whole chain; `make security` runs the hardening regressions.
 
-The MCP surface ships **6 read tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`. The 7th, `get_raw_document` (the injection-sensitive raw-HTML tool), is intentionally deferred. **Deliberately deferred past the MVP** (see `docs/STATUS.md` Known issues): the timed scheduler/worker loop, real embedding/LLM backends, SEC full-filing (Tika) + NVD keyed tier, an alert watchlist + lifecycle, and `time_series_point` yearly partitions. Scope is frozen until the current set runs unattended for a month.
+The MCP surface ships the **full 7 read tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`, and `get_raw_document` (sanitized by default; raw HTML only behind its gated, audited `include_raw_html` flag). **Deliberately deferred past the MVP** (see `docs/STATUS.md` Known issues): the timed scheduler/worker loop, real embedding/LLM backends, SEC full-filing (Tika) + NVD keyed tier, an alert watchlist + lifecycle, and `time_series_point` yearly partitions. Scope is frozen until the current set runs unattended for a month.
 
 ---
 
