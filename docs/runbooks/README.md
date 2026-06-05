@@ -22,6 +22,7 @@
 4. [Nightly Backup (pg_dump + offsite raw sync)](#4-nightly-backup-pg_dump--offsite-raw-sync)
 5. [Restore Drill (RPO 24h / RTO < 1 day)](#5-restore-drill-rpo-24h--rto--1-day)
 6. [`atlas purge` / Right-to-Erasure (full cascade R3)](#6-atlas-purge--right-to-erasure-full-cascade-r3)
+6A. [Audit-Log Rotation and crawl_job Pruning (B16)](#6a-audit-log-rotation-and-crawl_job-pruning-b16)
 7. [DLQ Inspection and Requeue](#7-dlq-inspection-and-requeue)
 8. [Stale-Source Handling (cooling_down + digest)](#8-stale-source-handling-cooling_down--digest)
 9. [Onboarding a New Source (default-deny → approved)](#9-onboarding-a-new-source-default-deny--approved)
@@ -654,6 +655,43 @@ psql "${DATABASE_URL/+psycopg/}" -c \
 > **Regression coverage:** A purge regression test covers the multi-doc summary case — a
 > `summary` with `document_id = NULL` linked only through `member_doc_ids[]` must be erased by
 > a member-doc purge. This is part of the B14 security/erasure suite.
+
+---
+
+## 6A. Audit-Log Rotation and crawl_job Pruning (B16)
+
+**Goal:** bound the growth of `audit_log` and `crawl_job` without ever destroying erasure proof or
+live work. Control-plane, MCP-independent; run on a daily cron now and by the B19 scheduler later.
+
+**The R14 guarantee.** `atlas audit rotate` deletes **only** `audit_log` rows with
+`retention_class='routine'` older than the audit window — the filter is on `retention_class`, never
+on action strings, so `retention_class='purge'` rows (erasure proof, written by `atlas purge` and by
+rotation itself) are **retained forever**. It also prunes **terminal** (`done`/`dead`) `crawl_job`
+rows older than the crawl window (keyed on `coalesce(finished_at, created_at)`); `pending`/`claimed`/
+`running`/`failed` are never pruned regardless of age.
+
+**Windows (config):** `AUDIT_ROUTINE_RETENTION` (default `180d`) and `CRAWL_JOB_RETENTION`
+(default `90d`) — duration grammar `Nd|Nw|Nm|Ny|Nh`, no `permanent`.
+
+```bash
+atlas audit rotate --dry-run        # preview counts; changes nothing, writes no bookkeeping entry
+atlas audit rotate                  # rotate + prune; writes ONE retained purge-class bookkeeping row
+atlas audit rotate --audit-window 365d --crawl-window 30d   # override windows
+```
+
+Each non-dry-run writes one retained (`retention_class='purge'`) `action='audit_rotate'` entry with
+**counts only** (never row content). Idempotent — re-running deletes nothing new.
+
+**Verify:**
+
+```bash
+psql "${DATABASE_URL/+psycopg/}" -c "SELECT retention_class, count(*) FROM audit_log GROUP BY 1;"
+psql "${DATABASE_URL/+psycopg/}" -c "SELECT status, count(*) FROM crawl_job GROUP BY 1;"
+```
+
+See [ADR 0027](../decisions/0027-audit-rotation-and-crawl-job-retention.md). Cross-refs: §6 (purge —
+the other retained-audit path) and §14 (secrets hygiene — `detail` is sanitized before write, so
+backups of the audit table are clean).
 
 ---
 

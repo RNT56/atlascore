@@ -159,7 +159,7 @@ CREATE INDEX source_policy_status_idx    ON source (policy_status);
 
 **Indexes.** `btree(status, scheduled_at)`; `unique(dedupe_key)`; `btree(source_id)`.
 
-**Retention.** 90 days (done/dead pruned).
+**Retention.** 90 days (done/dead pruned) — **implemented (B16)** by `storage.retention.prune_crawl_jobs` / `atlas audit rotate` (terminal rows only, keyed on `coalesce(finished_at, created_at)`; window `CRAWL_JOB_RETENTION`, default 90d; never prunes live work). [ADR 0027](../decisions/0027-audit-rotation-and-crawl-job-retention.md).
 
 > <a id="secret-redaction-invariant-r8x"></a>**Secret-redaction invariant.** Before persisting `crawl_job.last_error`, `crawl_job.payload`, or `audit_log.detail`, the writer **must** pass the value through one `sanitize_for_storage` helper in `packages/security/secrets`: redact known-secret patterns, strip URL **query** and **userinfo**, and strip `Authorization`/`Cookie` headers. Storing resolved credential values or credential-bearing URLs (e.g. FRED's `?api_key=...`) in any `jsonb`/`text` column is **forbidden**; backups (`pg_dump`) inherit this. The B15 secrets-in-logs regression test covers `last_error` and `audit_log.detail`.
 
@@ -677,7 +677,7 @@ CREATE INDEX alert_status_idx ON alert (status, severity, created_at);
 
 **Indexes.** `btree(ts)`; `btree(action)`.
 
-**Retention.** Routine ~few months (rotated); `retention_class='purge'` entries retained indefinitely.
+**Retention.** Routine ~few months (rotated); `retention_class='purge'` entries retained indefinitely. **Implemented (B16):** `storage.retention.rotate_audit_log` / `atlas audit rotate` deletes only `retention_class='routine'` rows beyond `AUDIT_ROUTINE_RETENTION` (default 180d) — filtered on `retention_class`, never action strings (R14) — and writes one retained `purge` bookkeeping entry. [ADR 0027](../decisions/0027-audit-rotation-and-crawl-job-retention.md).
 
 **DDL sketch.**
 

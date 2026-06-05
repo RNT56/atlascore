@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     smtp_from: str | None = None
     smtp_to: str | None = None
 
+    # --- Retention windows (control-plane rotation; duration grammar Nd|Nw|Nm|Ny|Nh) ---
+    # audit_log: only retention_class='routine' rows beyond this window are rotated; purge rows are
+    # retained forever (R14). crawl_job: only terminal (done|dead) rows beyond this window are pruned.
+    audit_routine_retention: str = "180d"
+    crawl_job_retention: str = "90d"
+
     # --- Logging ---
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 

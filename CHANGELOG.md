@@ -24,10 +24,23 @@ embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**, the **B1
 pipeline (`summary` table + content-hash cache + `get_document_summary`)**, the **B13 alert
 subsystem (`alert` table + four rule-based alerts + delivery + `get_alerts`)**, the **B14
 backups + restore drill + `atlas purge` (full R3 erasure cascade)**, and the **B15 hardening +
-end-to-end demo + the final `get_raw_document` MCP tool**. **The MVP (B1–B15) is complete with the
-full 7-tool MCP surface; scope is now frozen** (CLAUDE.md §5).
+end-to-end demo + the final `get_raw_document` MCP tool**. The MVP (B1–B15) is complete with the
+full 7-tool MCP surface. A **post-MVP upgrade cycle (B16–B22)** is now under way (depth on existing
+components, not new sources/services).
 
 ### Added
+
+- **B16 — control-plane retention: `atlas audit rotate`** ([ADR 0027](docs/decisions/0027-audit-rotation-and-crawl-job-retention.md)).
+  - `atlascore.storage.retention` (pure DML, no schema change): `rotate_audit_log` deletes only
+    `retention_class='routine'` audit rows older than the window — filtered on `retention_class`,
+    **never** action strings, so `purge` (erasure-proof) rows are structurally untouchable (R14);
+    `prune_crawl_jobs` deletes only terminal (`done`/`dead`) crawl_job rows older than the window
+    (keyed on `coalesce(finished_at, created_at)`), never live work; `run_retention` orchestrates
+    both in one txn and writes **one retained** (`retention_class='purge'`) count-only bookkeeping
+    entry. Idempotent; injected clock.
+  - `atlas audit rotate [--dry-run] [--audit-window <Nd>] [--crawl-window <Nd>]` (control-plane).
+    New `Settings.audit_routine_retention` (180d) / `crawl_job_retention` (90d) knobs in `.env.example`.
+    The B19 scheduler will call `run_retention` on a daily cadence (no new `JobType`).
 
 - **B15 polish — `get_raw_document` (the 7th MCP tool, completing the surface)** ([ADR 0026](docs/decisions/0026-b15-polish-get-raw-document.md)).
   - `atlascore.storage.raw_documents` + the `get_raw_document` MCP tool (docs/mcp §2.7, R7): resolve

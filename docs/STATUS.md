@@ -346,35 +346,28 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-*(none)* — **the MVP (B1–B15) is complete.** Scope is frozen (CLAUDE.md §5) until the current set
-runs unattended for a month; the next cycle picks from "Next" below.
+- **Post-MVP upgrade cycle (B16–B22)** — claimed by session (AI) 2026-06-05. A grounded, dependency-
+  ordered roadmap (planned via a multi-agent design workflow). These are **depth on existing
+  components**, not new sources/services, so the §5 freeze (which gates *new sources/services*) is
+  respected. Executing in order, each an independently-committed block:
+  - **B16** audit_log rotation + crawl_job prune (`atlas audit rotate`; no DDL) — *in progress*.
+  - **B17** `time_series_point` yearly partitions + partition mgmt (migration 0010; `JobType.PARTITION`).
+  - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`).
+  - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone.
+  - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011).
+  - **B21** real embedding/LLM backends + spend-cap ledger + spaCy NER + `atlas reindex-embeddings` (migration 0012).
+  - **B22** SEC full-filing via sandboxed Tika + FilingParser (graceful metadata fallback; no DDL).
 
 ---
 
 ## Next
 
-**MVP complete — scope frozen.** No backlog block is in flight. The deliberately-deferred,
-not-started work (start a cycle by claiming one here, in roughly this order):
+**Active cycle: B16–B22 (post-MVP upgrade), see In progress.** Migrations sequence: 0010 (B17),
+0011 (B20), 0012 (B21). Heavy/cloud paths (B21 sentence-transformers/cloud + B22 Tika/Java) keep the
+deterministic offline default as the CI path and are contract-tested with respx + import guards.
 
-1. **Scheduler / unattended worker loop** — the single-instance scheduler that runs timed
-   `freshness` + `alert` jobs and the daily FRED/EDGAR/NVD fetches, plus a long-running
-   fetch→parse→enrich→alert worker loop (single-fetch-worker + single-scheduler liveness), and the
-   `audit_log` rotation that prunes only `retention_class='routine'` beyond the window. This turns
-   "runs unattended" from a per-command truth into a continuously-running deployment.
-2. **Real enrichment/summary backends** — wire sentence-transformers / cloud embeddings
-   (`EMBEDDING_BACKEND`) and a hosted LLM summary backend (`LLM_BACKEND=api`) with hard
-   `LLM_MONTHLY_SPEND_CAP_EUR` enforcement + cloud-egress controls, replacing the deterministic
-   MVP baselines (interfaces already in place — no schema change for same-dim embeddings).
-3. **Connector depth** — SEC full-filing extraction (sandboxed Tika), NVD keyed `apiKey`-header
-   tier, conditional/incremental fetch for SEC/NVD, and a spaCy NER backend.
-4. **Alert maturity** — a per-issuer / CVSS **watchlist** (so rules fire on *watched* items, not
-   every item) + a lifecycle CLI (acknowledge/resolve).
-5. **`time_series_point` yearly partitions** + a partition-management runbook.
-
-*(The 7th MCP tool, `get_raw_document`, was completed in the B15 polish pass — no longer pending.)*
-
-**Operating note:** before adding any new source or service, confirm the current set has run
-unattended for a month (the §5 freeze). Everything above is post-freeze.
+After B22: re-confirm the set runs unattended for a month (§5) before adding any **new source or
+service**. The 7-tool MCP surface is complete and stays stable across this cycle.
 
 ---
 
@@ -390,9 +383,10 @@ unattended for a month (the §5 freeze). Everything above is post-freeze.
   operational path); `infra/restore_drill.sh` is run on demand / in the deploy runbook (it needs
   `pg_dump`/`pg_restore` + a scratch DB). The B14 restore was verified live against the throwaway
   PG16 container (14 tables + rows restored into a scratch DB).
-- **No `audit_log` rotation job yet** — purge entries are flagged `retention_class='purge'` (retained
-  forever) and routine entries accumulate; the rotation that deletes only `routine` rows beyond the
-  window lands with the scheduler block.
+- **Audit/crawl_job retention — RESOLVED in B16.** `atlas audit rotate` (`storage.retention`) deletes
+  only `retention_class='routine'` audit rows beyond `AUDIT_ROUTINE_RETENTION` (purge rows retained
+  forever, R14) and prunes terminal `crawl_job` rows beyond `CRAWL_JOB_RETENTION`. The B19 scheduler
+  will drive the daily cadence ([ADR 0027](decisions/0027-audit-rotation-and-crawl-job-retention.md)).
 - **B13 alerts fire on every matching item — no watchlist yet (by design; ADR 0023).** The
   `sec_filing`/`cve_watch` rules alert on **every** filing/CVE in the scan window (not just watched
   issuers / critical CVSS); a per-issuer/CVSS watchlist (the spec's `nvd_critical_watch` flavour) is
