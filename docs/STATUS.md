@@ -383,6 +383,22 @@ summarize` pre-warm CLI, per-filing second-fetch wiring of B22 extraction into t
 
 ## Known issues
 
+- **Alert/digest delivery on a blank `ALERT_WEBHOOK_URL` — RESOLVED 2026-06-05** (found during a full
+  end-to-end run). `get_delivery_channel` gated the webhook with `is not None`; the empty
+  `ALERT_WEBHOOK_URL=` shipped in `.env.example` loads as `SecretStr('')`, so `cp .env.example .env`
+  silently selected a `WebhookChannel` pointed at an empty URL (alert + digest delivery would fail on
+  first deploy) instead of falling back to ntfy/SMTP/LogChannel. Now an empty webhook secret is treated
+  as unconfigured, consistent with ntfy/SMTP. A shared `_clean()` helper strips + truthy-checks all
+  three channels, so blank *and* whitespace-only values fall through (a real URL with stray surrounding
+  whitespace is stripped, not rejected); regressions `test_empty_webhook_url_is_unconfigured` +
+  `test_whitespace_only_values_are_unconfigured`.
+- **Offline migration SQL (`alembic upgrade head --sql`) crashed on 0010 — RESOLVED 2026-06-05** (found
+  during the same run). Migration `0010` (time-series yearly partitions) called
+  `op.get_bind().exec_driver_sql(...)`, which has no live bind under offline mode's `MockConnection`, so
+  the CI `migrations` "Offline SQL dry run" step would fail. Both introspection sites are now guarded
+  with `op.get_context().as_sql`; the online path is unchanged (live DB already at head). New
+  network-free regression `tests/unit/test_migration_offline_sql.py`. A sweep of migrations 0001–0012
+  confirmed 0010 was the only such site.
 - **B14 shared-raw erasure is deferred to the last reference (by design; ADR 0024).** One
   `raw_document` (a whole RSS feed / SEC submissions blob) backs **many** documents, and the FK is
   `RESTRICT`, so `atlas purge <doc>` deletes the raw file/row **only when no other document

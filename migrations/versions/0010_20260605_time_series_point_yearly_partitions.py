@@ -40,10 +40,13 @@ def _carve_year(year: int) -> None:
     """Create the bounded child for ``year`` and move its rows out of DEFAULT (with-rows safe)."""
     name = f"{_PARENT}_{year}"
     lo, hi = f"{year}-01-01 00:00:00+00", f"{year + 1}-01-01 00:00:00+00"
-    # Idempotent: skip if the child already exists.
-    exists = op.get_bind().exec_driver_sql(f"SELECT to_regclass('{name}')").scalar()
-    if exists is not None:
-        return
+    # Idempotent: skip if the child already exists. The introspection needs a live bind, so in
+    # offline (`--sql`) mode — which has only a MockConnection — emit the DDL unconditionally
+    # (an offline script targets a fresh DB, where the child does not yet exist).
+    if not op.get_context().as_sql:
+        exists = op.get_bind().exec_driver_sql(f"SELECT to_regclass('{name}')").scalar()
+        if exists is not None:
+            return
     op.execute(f"ALTER TABLE {_PARENT} DETACH PARTITION {_DEFAULT}")
     op.execute(f"CREATE TABLE {name} PARTITION OF {_PARENT} FOR VALUES FROM ('{lo}') TO ('{hi}')")
     op.execute(
@@ -54,6 +57,10 @@ def _carve_year(year: int) -> None:
 
 
 def _yearly_children() -> list[str]:
+    # Offline (`--sql`) mode has no live bind to introspect existing children; an offline downgrade
+    # script can't enumerate them, so emit nothing for the partition-collapse loop.
+    if op.get_context().as_sql:
+        return []
     rows = op.get_bind().exec_driver_sql(
         "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid "
         "JOIN pg_class p ON p.oid = i.inhparent "
