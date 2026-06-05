@@ -32,12 +32,18 @@ class SummaryInput:
 
 @dataclass(frozen=True)
 class SummaryResult:
-    """A produced summary: text + per-document claim citations + a token-cost estimate."""
+    """A produced summary: text + per-document claim citations + a token-cost estimate.
+
+    ``input_tokens``/``output_tokens`` are the provider-reported usage split (hosted backends);
+    the free extractive backend leaves them 0. ``token_cost`` stays the total for the cache row.
+    """
 
     summary_text: str
     # internal document id -> the claims (sentences) it supports. Never an external URL.
     citations: dict[str, list[str]] = field(default_factory=dict)
     token_cost: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 @runtime_checkable
@@ -53,6 +59,16 @@ class SummaryBackend(Protocol):
     @property
     def prompt_version(self) -> str: ...
 
+    @property
+    def is_paid(self) -> bool:
+        """True if calling this backend incurs metered cost (gated by the LLM spend cap, §20)."""
+        ...
+
+    @property
+    def provider(self) -> str:
+        """Provider key for the spend ledger (e.g. 'openai'); free backends may return 'local'."""
+        ...
+
     def summarize(self, docs: list[SummaryInput]) -> SummaryResult:
         """Return a cited summary of ``docs`` (order is significant — part of the cache key)."""
         ...
@@ -61,9 +77,8 @@ class SummaryBackend(Protocol):
 def get_summary_backend(settings: Settings | None = None) -> SummaryBackend | None:
     """Resolve the configured summary backend, or ``None`` for ``LLM_BACKEND=none`` (cache-only).
 
-    ``local`` → the deterministic extractive summarizer (always available). ``api`` is recognized
-    but not wired in MVP — it raises a clear :class:`ConfigError` pointing at the ``api`` extra and
-    ADR 0022 rather than silently degrading.
+    ``local`` → the deterministic extractive summarizer (free, always available). ``api`` → the
+    hosted backend (B21; metered, gated by ``LLM_MONTHLY_SPEND_CAP_EUR``, needs the ``api`` extra).
     """
     settings = settings or get_settings()
     if settings.llm_backend == "none":
@@ -72,7 +87,10 @@ def get_summary_backend(settings: Settings | None = None) -> SummaryBackend | No
         from atlascore.enrichment.summaries.extractive import ExtractiveSummarizer
 
         return ExtractiveSummarizer()
-    raise ConfigError(
-        f"LLM backend {settings.llm_backend!r} is not wired in MVP (B12 ships the deterministic "
-        "'local' extractive backend; hosted models need the `api` extra — see ADR 0022)"
+    if settings.llm_backend == "api":
+        from atlascore.enrichment.summaries.hosted import HostedSummaryBackend
+
+        return HostedSummaryBackend(settings=settings)
+    raise ConfigError(  # unreachable for the typed Literal, but defensive
+        f"LLM backend {settings.llm_backend!r} is not recognized (local|api|none)"
     )

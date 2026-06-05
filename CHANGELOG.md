@@ -30,6 +30,20 @@ components, not new sources/services).
 
 ### Added
 
+- **B21 — real embedding/LLM backends + hard spend cap + spaCy NER + reindex** ([ADR 0032](docs/decisions/0032-b21-real-backends-spend-cap-spacy-reindex.md)).
+  - Embeddings: `EMBEDDING_BACKEND=sentence-transformers` (real local, import-guarded) and
+    `openai`/`google` cloud backends over httpx (respx-tested; vector dim validated == `EMBEDDING_DIM`,
+    R8). `local` stays the deterministic hashing CI default.
+  - Summaries: `LLM_BACKEND=api` → `HostedSummaryBackend` (OpenAI/Anthropic/Google over httpx,
+    `LLM_PROVIDER`). Member bodies kept in an untrusted-evidence block; key header-only + redacted.
+  - **Hard monthly spend cap:** new `llm_spend` ledger (migration `0012`) + `storage.llm_spend`
+    (conservative price table). The summary pipeline checks month-to-date spend before any paid call
+    and **degrades to cache-only** at/over `LLM_MONTHLY_SPEND_CAP_EUR` (null + reason); a successful
+    paid compute records the ledger row in the summary's transaction. Free backends never charge.
+  - NER: `NER_BACKEND=spacy` (`SpacyNer`, import-guarded) with rule-based fallback (never crashes).
+  - `atlas reindex-embeddings [--model] [--batch] [--dry-run]` — bounded, resumable, idempotent
+    embedding backfill/reindex for a model/dim switch (R8). New backend/cap/NER settings in `.env.example`.
+
 - **B20 — connector depth: custom headers + NVD keyed tier + incremental checkpoint** ([ADR 0031](docs/decisions/0031-b20-connector-depth-headers-keyed-nvd-checkpoint.md)).
   - `SafeFetcher.fetch(..., extra_headers=)` merges caller headers via `setdefault` (re-applied per
     redirect hop) — they can never clobber the managed `User-Agent`/conditional cache headers.

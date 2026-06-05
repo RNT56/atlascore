@@ -751,7 +751,15 @@ CREATE TABLE source_health (
 CREATE INDEX source_health_status_idx ON source_health (status);
 ```
 
-> **Implemented (B8) — migration `0005`** ([ADR 0018](../decisions/0018-b8-source-health-freshness-and-digest.md)). ORM `SourceHealth` + `HealthStatus` enum; FK `ON DELETE RESTRICT`; `freshness_lag` is a Postgres `interval`; `status` CHECK-bounded; `btree(status)`. The freshness computation lives in `worker/freshness.py`: `refresh_source_health` computes (read-only over `crawl_job` + `document`) and idempotently upserts each source's snapshot. Status is derived by the pure `classify_status` (precedence `cooling_down` > `stale` > `warn` > `error` > `ok`; `COOLING_THRESHOLD=3`). `atlas health` / `atlas digest` drive the computation then read it (no scheduler yet); `get_source_health` (MCP) and `storage.source_health.list_source_health` read a **secret-free** view (name + slug only). `duplicate_rate` is null in MVP.
+> **Implemented (B8) — migration `0005`** ([ADR 0018](../decisions/0018-b8-source-health-freshness-and-digest.md)). ORM `SourceHealth` + `HealthStatus` enum; FK `ON DELETE RESTRICT`; `freshness_lag` is a Postgres `interval`; `status` CHECK-bounded; `btree(status)`. The freshness computation lives in `worker/freshness.py`: `refresh_source_health` computes (read-only over `crawl_job` + `document`) and idempotently upserts each source's snapshot. Status is derived by the pure `classify_status` (precedence `cooling_down` > `stale` > `warn` > `error` > `ok`; `COOLING_THRESHOLD=3`). `atlas health` / `atlas digest` drive the computation then read it (the B19 scheduler now also runs it inline); `get_source_health` (MCP) and `storage.source_health.list_source_health` read a **secret-free** view (name + slug only). `duplicate_rate` is null in MVP.
+
+### 2.13 llm_spend (operational, B21)
+
+**Purpose.** The LLM cost ledger backing the hard monthly spend cap (§20). One row per paid hosted-LLM call. Not one of the 12 canonical data tables — a control-plane operational table (like the queue), so it sits outside the purge cascade.
+
+**Columns.** `id` uuid PK, `ts` timestamptz default now(), `provider` text, `model` text, `request_kind` text (`summary`), `input_tokens` int, `output_tokens` int, `est_cost_eur` numeric(12,6), `period_ym` text ('YYYY-MM'), `summary_id` uuid **(non-FK** — decoupled from the raw-SQL `summary` table, purge-simple), `created_at`, `schema_version`. **Index** `btree(period_ym)` for month-to-date sums.
+
+> **Implemented (B21) — migration `0012`** ([ADR 0032](../decisions/0032-b21-real-backends-spend-cap-spacy-reindex.md)). Normal autogenerate-managed table. `storage.llm_spend` exposes `estimate_cost_eur` (conservative per-provider price table), `month_to_date_spend(period_ym)`, and `record_spend(...)`. The summary pipeline sums month-to-date spend before any paid (`SummaryBackend.is_paid`) compute and **degrades to cache-only** at/over `LLM_MONTHLY_SPEND_CAP_EUR`; a successful paid compute records one ledger row in the summary's transaction.
 
 ---
 

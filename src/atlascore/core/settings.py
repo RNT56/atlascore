@@ -14,8 +14,10 @@ from typing import Literal
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-EmbeddingBackend = Literal["local", "openai", "google"]
+EmbeddingBackend = Literal["local", "sentence-transformers", "openai", "google"]
 LlmBackend = Literal["local", "api", "none"]
+LlmProvider = Literal["openai", "anthropic", "google"]
+NerBackend = Literal["rules", "spacy"]
 AppEnv = Literal["dev", "staging", "prod", "ci"]
 
 
@@ -42,17 +44,31 @@ class Settings(BaseSettings):
     # Optional single-binary search engine; blank => Postgres FTS only (default).
     meili_url: str | None = None
 
-    # --- Embeddings (ONE active model+dim per deployment; switching = backfill) ---
+    # --- Embeddings (ONE active model+dim per deployment; switching = backfill, R8) ---
+    # `local` = the deterministic hashing backend (offline/CI default). `sentence-transformers` =
+    # the real local ST embedder (needs the `local-embeddings` extra). `openai`/`google` = cloud
+    # (needs the `cloud` extra). EMBEDDING_DIM must match the active model's output dim (R8).
     embedding_backend: EmbeddingBackend = "local"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
     embedding_api_key: SecretStr | None = None
+    embedding_request_timeout: float = 30.0
+    embedding_max_batch: int = 64
 
     # --- LLM summaries ---
     llm_backend: LlmBackend = "none"
+    llm_provider: LlmProvider = "openai"  # which hosted API `api` talks to
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
+    llm_request_timeout: float = 60.0
+    llm_max_output_tokens: int = 512
     llm_monthly_spend_cap_eur: float = 10.0
+    # Cloud-egress control: request no-training / zero-retention options where the provider supports
+    # it (compliance §16/§20 — personal data egresses to a third party when a cloud backend is used).
+    cloud_no_train: bool = True
+
+    # --- NER backend (B21; `rules` = deterministic default, `spacy` needs the local-embeddings extra) ---
+    ner_backend: NerBackend = "rules"
 
     # --- HTTP fetcher (transparent project UA + contact; never browser-impersonating) ---
     default_user_agent: str = "AtlasCore/0.0 (single-operator research; contact: you@example.com)"

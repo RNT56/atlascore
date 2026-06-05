@@ -18,12 +18,16 @@ them separated. Identical `(content, model, prompt)` tuples are never re-summari
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from atlascore.core.clock import Clock, SystemClock
+from atlascore.core.settings import get_settings
 from atlascore.enrichment.summaries.base import SummaryBackend, SummaryInput
+from atlascore.storage.llm_spend import month_to_date_spend, period_ym, record_spend
 from atlascore.storage.summaries import (
     MemberProvenance,
     SummaryView,
@@ -57,8 +61,16 @@ def summarize_documents(
     *,
     backend: SummaryBackend | None,
     allow_compute: bool = True,
+    clock: Clock | None = None,
 ) -> SummaryOutcome:
-    """Return a cached/freshly-computed cited summary for the ordered ``doc_ids``. Caller's txn."""
+    """Return a cached/freshly-computed cited summary for the ordered ``doc_ids``. Caller's txn.
+
+    A **paid** backend (``is_paid``) is gated by ``LLM_MONTHLY_SPEND_CAP_EUR`` (§20): if month-to-date
+    spend is at/over the cap, compute is skipped and the request degrades to cache-only (a cached row
+    is still returned; otherwise a ``found=False`` reason). A successful paid compute records one
+    ``llm_spend`` ledger row in this same transaction.
+    """
+    clock = clock or SystemClock()
     member_ids = [str(d) for d in doc_ids]
     documents = load_member_documents(session, doc_ids)
     if documents is None:
@@ -75,6 +87,12 @@ def summarize_documents(
     members = member_provenance(session, doc_ids)
 
     compute = allow_compute and backend is not None
+    # §20 hard spend cap: a paid backend at/over the month-to-date cap degrades to cache-only.
+    over_cap = False
+    if compute and getattr(backend, "is_paid", False):
+        cap = Decimal(str(get_settings().llm_monthly_spend_cap_eur))
+        if month_to_date_spend(session, period_ym(clock.now())) >= cap:
+            compute, over_cap = False, True
     if compute:
         assert backend is not None  # noqa: S101 — guarded by `compute`
         cached = get_cached_summary(
@@ -97,11 +115,14 @@ def summarize_documents(
         )
 
     if not compute:
-        reason = (
-            "allow_compute=false and no cached summary for this content"
-            if backend is not None
-            else "LLM_BACKEND=none and no cached summary for this (content, model, prompt) tuple"
-        )
+        if over_cap:
+            reason = "LLM monthly spend cap reached; cache-only"
+        elif backend is not None:
+            reason = "allow_compute=false and no cached summary for this content"
+        else:
+            reason = (
+                "LLM_BACKEND=none and no cached summary for this (content, model, prompt) tuple"
+            )
         return SummaryOutcome(
             found=False,
             cache="miss",
@@ -129,6 +150,18 @@ def summarize_documents(
         citations=result.citations,
         token_cost=result.token_cost,
     )
+    # §20: record the paid call's cost in the same txn so the cap is enforced cumulatively.
+    if getattr(backend, "is_paid", False):
+        record_spend(
+            session,
+            provider=getattr(backend, "provider", backend.model_name),
+            model=backend.model_version,
+            request_kind="summary",
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            now=clock.now(),
+            summary_id=stored.id if hasattr(stored, "id") else None,
+        )
     return SummaryOutcome(
         found=True,
         cache="miss",

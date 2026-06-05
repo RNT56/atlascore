@@ -12,7 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from atlascore.core.errors import ConfigError
+from atlascore.core.logging import get_logger
+from atlascore.core.settings import Settings, get_settings
+
+_log = get_logger("atlascore.enrichment.ner")
 
 
 @dataclass(frozen=True)
@@ -46,12 +49,24 @@ class NerBackend(Protocol):
         ...
 
 
-def get_ner_backend() -> NerBackend:
-    """Resolve the NER backend. MVP always returns the deterministic rule-based extractor."""
+def get_ner_backend(settings: Settings | None = None) -> NerBackend:
+    """Resolve the NER backend by ``NER_BACKEND`` (B21).
+
+    ``rules`` → the deterministic rule-based extractor (default, always available). ``spacy`` →
+    the spaCy small-model backend (``local-embeddings`` extra); if spaCy or the model is unavailable
+    it **falls back** to the rule-based extractor with a logged warning — enrichment never crashes.
+    A different backend writes a distinct ``model_name``/``version``, so backends coexist cleanly
+    (the pipeline clears by model identity; no schema change).
+    """
+    settings = settings or get_settings()
     from atlascore.enrichment.ner.rules import RuleBasedNer
 
+    if settings.ner_backend == "spacy":
+        try:
+            from atlascore.enrichment.ner.spacy_ner import SpacyNer
+
+            return SpacyNer(settings=settings)
+        except Exception as exc:  # spaCy/model missing → degrade, don't crash enrichment
+            _log.warning("ner_backend_fallback", requested="spacy", error=str(exc))
+            return RuleBasedNer()
     return RuleBasedNer()
-
-
-def _unreachable_cloud_ner() -> NerBackend:  # pragma: no cover - reserved for a future spaCy swap
-    raise ConfigError("only the rule-based NER backend is wired in MVP (see ADR 0021)")

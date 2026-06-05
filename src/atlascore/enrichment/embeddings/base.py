@@ -40,17 +40,32 @@ class EmbeddingBackend(Protocol):
 def get_embedding_backend(settings: Settings | None = None) -> EmbeddingBackend:
     """Resolve the configured embedding backend.
 
-    ``local`` → the deterministic MVP backend (always available). ``openai``/``google`` are
-    recognized but not wired in MVP — they raise a clear :class:`ConfigError` pointing at the
-    optional ``cloud`` extra and ADR 0021 rather than silently degrading.
+    ``local`` → the deterministic hashing backend (offline/CI default, always available).
+    ``sentence-transformers`` → the real local embedder (``local-embeddings`` extra).
+    ``openai``/``google`` → cloud backends over httpx (``cloud`` extra). Each non-default backend
+    validates its output dim against ``EMBEDDING_DIM`` (R8) and fails loudly if unavailable.
     """
     settings = settings or get_settings()
     # Imported here (not at module top) to keep the protocol module import-light.
-    from atlascore.enrichment.embeddings.hashing import HashingEmbeddingBackend
-
     if settings.embedding_backend == "local":
+        from atlascore.enrichment.embeddings.hashing import HashingEmbeddingBackend
+
         return HashingEmbeddingBackend(dim=settings.embedding_dim)
-    raise ConfigError(
-        f"embedding backend {settings.embedding_backend!r} is not wired in MVP (B11 ships the "
-        "deterministic 'local' backend; cloud backends need the `cloud` extra — see ADR 0021)"
+    if settings.embedding_backend == "sentence-transformers":
+        from atlascore.enrichment.embeddings.sentence_transformers_backend import (
+            SentenceTransformersEmbeddingBackend,
+        )
+
+        return SentenceTransformersEmbeddingBackend(settings=settings)
+    if settings.embedding_backend in ("openai", "google"):
+        from atlascore.enrichment.embeddings.cloud import (
+            GoogleEmbeddingBackend,
+            OpenAIEmbeddingBackend,
+        )
+
+        if settings.embedding_backend == "openai":
+            return OpenAIEmbeddingBackend(settings=settings)
+        return GoogleEmbeddingBackend(settings=settings)
+    raise ConfigError(  # unreachable for the typed Literal, but defensive
+        f"embedding backend {settings.embedding_backend!r} is not recognized"
     )

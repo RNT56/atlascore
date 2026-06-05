@@ -274,6 +274,7 @@ atlas audit rotate [--dry-run]               # rotate routine audit_log + prune 
 atlas tsp partitions status|ensure           # time_series_point yearly partition management (B17)
 atlas scheduler run                          # single-instance scheduler: due fetches + inline housekeeping (B19)
 atlas worker run [--role fetch|parse|enrich] # continuous fetch->parse->enrich drain loop (B19)
+atlas reindex-embeddings [--model][--dry-run] # bounded resumable embedding backfill/reindex (R8; B21)
 ```
 
 If a command doesn't exist yet, add it (CLI is the control plane) or report the actual command used. `atlas health`/`atlas digest` are control-plane and MCP-independent.

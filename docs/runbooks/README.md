@@ -1069,11 +1069,12 @@ $EDITOR /opt/atlascore/.env
 #    (migration). The embedding table stores model_name/model_version/dim per row, so old and
 #    new rows are distinguishable during the transition.
 
-# 4. Backfill: re-embed all documents under the new model. Bounded, observable, resumable.
-atlas enrich backfill --stage embeddings --model "$EMBEDDING_MODEL" --resume
+# 4. Backfill: re-embed all documents under the new model. Bounded, observable, resumable (B21).
+atlas reindex-embeddings --dry-run                      # preview: counts, target model/dim, no writes
+atlas reindex-embeddings --model "$EMBEDDING_MODEL" --batch 100
 
 #    Idempotency: re-embedding an unchanged source_hash is a no-op
-#    (unique(document_id, chunk_index, model_name, model_version)).
+#    (unique(document_id, chunk_index, model_name, model_version), R13). Re-runnable / resumable.
 
 # 5. Reindex: build/refresh the HNSW index on the new-dim vectors.
 #    (Handled by the backfill's final reindex step / a migration.)

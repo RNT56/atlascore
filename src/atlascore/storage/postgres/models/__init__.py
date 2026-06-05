@@ -11,6 +11,7 @@ from atlascore.storage.postgres.models.crawl_job import CrawlJob
 from atlascore.storage.postgres.models.document import Document
 from atlascore.storage.postgres.models.embedding import Embedding
 from atlascore.storage.postgres.models.entity import Entity
+from atlascore.storage.postgres.models.llm_spend import LlmSpend
 from atlascore.storage.postgres.models.mention import Mention
 from atlascore.storage.postgres.models.raw_document import RawDocument
 from atlascore.storage.postgres.models.source import Source
@@ -25,6 +26,7 @@ __all__ = [
     "Document",
     "Embedding",
     "Entity",
+    "LlmSpend",
     "Mention",
     "RawDocument",
     "Source",

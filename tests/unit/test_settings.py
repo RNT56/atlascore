@@ -33,6 +33,11 @@ def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.embedding_dim == 384
     assert s.llm_backend == "none"
     assert s.database_url.startswith("postgresql+psycopg://")
+    # B21 defaults
+    assert s.ner_backend == "rules"
+    assert s.llm_provider == "openai"
+    assert s.cloud_no_train is True
+    assert s.llm_monthly_spend_cap_eur == 10.0
 
 
 def test_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:

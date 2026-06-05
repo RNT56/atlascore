@@ -56,6 +56,14 @@ class ExtractiveSummarizer:
     def prompt_version(self) -> str:
         return PROMPT_VERSION
 
+    @property
+    def is_paid(self) -> bool:
+        return False  # deterministic, free, offline — never gated by the spend cap
+
+    @property
+    def provider(self) -> str:
+        return "local"
+
     def summarize(self, docs: list[SummaryInput]) -> SummaryResult:
         citations: dict[str, list[str]] = {}
         lines: list[str] = []

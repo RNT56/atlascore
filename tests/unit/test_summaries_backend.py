@@ -63,9 +63,24 @@ def test_extractive_summarizer_empty_doc_skipped() -> None:
 
 def test_backend_factory_branches() -> None:
     assert get_summary_backend(Settings(llm_backend="none")) is None
-    assert isinstance(get_summary_backend(Settings(llm_backend="local")), ExtractiveSummarizer)
-    with pytest.raises(Exception):  # noqa: B017 - api not wired in MVP (ConfigError)
-        get_summary_backend(Settings(llm_backend="api"))
+    local = get_summary_backend(Settings(llm_backend="local"))
+    assert isinstance(local, ExtractiveSummarizer)
+    assert local.is_paid is False  # free → never gated by the spend cap (B21)
+
+
+def test_api_backend_requires_key_and_is_paid() -> None:
+    from atlascore.core.errors import ConfigError
+    from atlascore.enrichment.summaries.hosted import HostedSummaryBackend
+
+    # api without a key fails loudly (B21).
+    with pytest.raises(ConfigError, match="LLM_API_KEY"):
+        get_summary_backend(Settings(llm_backend="api", llm_api_key=None))
+    # api with a key returns the hosted backend (no network at construction); it is metered.
+    backend = get_summary_backend(
+        Settings(llm_backend="api", llm_api_key="k")
+    )  # pragma: allowlist secret
+    assert isinstance(backend, HostedSummaryBackend)
+    assert backend.is_paid is True
 
 
 def test_source_hash_order_sensitive() -> None:

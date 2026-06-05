@@ -355,7 +355,7 @@ until the current set runs unattended for a month before adding sources or servi
   - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`) — ✅ **DONE**.
   - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone — ✅ **DONE**.
   - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011) — ✅ **DONE**.
-  - **B21** real embedding/LLM backends + spend-cap ledger + spaCy NER + `atlas reindex-embeddings` (migration 0012).
+  - **B21** real embedding/LLM backends + spend-cap ledger + spaCy NER + `atlas reindex-embeddings` (migration 0012) — ✅ **DONE**.
   - **B22** SEC full-filing via sandboxed Tika + FilingParser (graceful metadata fallback; no DDL).
 
 ---
@@ -399,13 +399,14 @@ service**. The 7-tool MCP surface is complete and stays stable across this cycle
   fetch→parse→enrich (fetch under the single-fetch lock). `atlas health`/`atlas digest` report real
   scheduler liveness ([ADR 0030](decisions/0030-b19-scheduler-and-worker-loop.md)). Deploy both as
   systemd units / compose services (one scheduler, one fetch worker) — see the runbook.
-- **B12 summary backend is a deterministic extractive baseline (by design; ADR 0022).** The
-  `local` backend (`ExtractiveSummarizer`) takes each document's leading sentence(s) and cites them
-  to the internal doc id — useful and honest, but **not an abstractive narrative** until a real
-  local/hosted LLM is wired. `LLM_BACKEND=api` (hosted models), the **hard
-  `LLM_MONTHLY_SPEND_CAP_EUR` enforcement** (degrade-to-cache-only over cap), and the cloud-egress
-  controls are **deferred** to when the `api` backend lands (`api` currently raises a clear
-  `ConfigError`). Default `LLM_BACKEND=none` ⇒ `get_document_summary` is cache-only.
+- **Real backends + spend cap — WIRED in B21** ([ADR 0032](decisions/0032-b21-real-backends-spend-cap-spacy-reindex.md)).
+  `LLM_BACKEND=api` (`HostedSummaryBackend`, OpenAI/Anthropic/Google over httpx) and
+  `EMBEDDING_BACKEND=sentence-transformers|openai|google` are now wired (import-guarded; respx-tested),
+  with the **hard `LLM_MONTHLY_SPEND_CAP_EUR`** enforced via the `llm_spend` ledger
+  (degrade-to-cache-only over cap) and cloud no-train/zero-retention controls. `NER_BACKEND=spacy`
+  (`SpacyNer`) is wired with a rule-based fallback. `atlas reindex-embeddings` handles a model/dim
+  switch (R8). The deterministic `local`/extractive/rule-based path remains the offline CI default;
+  default `LLM_BACKEND=none` ⇒ `get_document_summary` stays cache-only.
 - **`get_document_summary` writes a `summary` row on compute (documented exception).** docs/mcp §1
   says MCP "writes only audit_log", but §2.4/§4 specify compute-on-miss; the tool follows the
   specific contract. With the default `LLM_BACKEND=none` it is cache-only (no summary writes); a

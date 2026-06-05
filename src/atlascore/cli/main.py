@@ -22,6 +22,7 @@ from atlascore.cli.mcp import mcp_app
 from atlascore.cli.parse import parse_raw
 from atlascore.cli.partitions import tsp_app
 from atlascore.cli.purge import purge_cmd
+from atlascore.cli.reindex import reindex_embeddings_cmd
 from atlascore.cli.scheduler import scheduler_app
 from atlascore.cli.search import search_cmd
 from atlascore.cli.source import source_app
@@ -48,6 +49,7 @@ app.command(name="health")(health_cmd)
 app.command(name="digest")(digest_cmd)
 app.command(name="backup")(backup_cmd)
 app.command(name="purge")(purge_cmd)
+app.command(name="reindex-embeddings")(reindex_embeddings_cmd)
 
 
 def _version() -> str:
