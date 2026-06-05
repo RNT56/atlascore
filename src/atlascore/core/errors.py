@@ -33,3 +33,7 @@ class FetchError(AtlasError):
 
 class FetchWorkerBusyError(AtlasError):
     """Another fetch worker already holds the single-fetch-worker lock (R16)."""
+
+
+class AlertTransitionError(AtlasError):
+    """An illegal alert lifecycle transition (e.g. resolving a purged/terminal alert)."""

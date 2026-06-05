@@ -165,9 +165,11 @@ def test_smoke_end_to_end(migrated_engine: Engine, tmp_path: Path, llm_local: No
     assert str(doc_id) in summ.summary.citations  # cited to the internal doc id
 
     # 4. ALERT — the cve_watch rule fires citing the document; queryable via MCP get_alerts.
+    from atlascore.alerts.rules import ALL_RULES
     from atlascore.worker.alerts import run_alerts
 
-    run_alerts(migrated_engine, channel=LogChannel())
+    # Ungated rules so the demo fires on the seeded CVE regardless of the repo watchlist (B18).
+    run_alerts(migrated_engine, rules=ALL_RULES, channel=LogChannel())
     server = build_mcp_server(migrated_engine)
     _b, alerts_payload = asyncio.run(server.call_tool(TOOL_GET_ALERTS, {"limit": 50}))
     cve_alerts = [a for a in alerts_payload["alerts"] if a["alert_type"] == "cve_watch"]

@@ -352,7 +352,7 @@ until the current set runs unattended for a month before adding sources or servi
   respected. Executing in order, each an independently-committed block:
   - **B16** audit_log rotation + crawl_job prune (`atlas audit rotate`; no DDL) — ✅ **DONE**.
   - **B17** `time_series_point` yearly partitions + partition mgmt (migration 0010; `JobType.PARTITION`) — ✅ **DONE**.
-  - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`).
+  - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`) — ✅ **DONE**.
   - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone.
   - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011).
   - **B21** real embedding/LLM backends + spend-cap ledger + spaCy NER + `atlas reindex-embeddings` (migration 0012).
@@ -387,15 +387,13 @@ service**. The 7-tool MCP surface is complete and stays stable across this cycle
   only `retention_class='routine'` audit rows beyond `AUDIT_ROUTINE_RETENTION` (purge rows retained
   forever, R14) and prunes terminal `crawl_job` rows beyond `CRAWL_JOB_RETENTION`. The B19 scheduler
   will drive the daily cadence ([ADR 0027](decisions/0027-audit-rotation-and-crawl-job-retention.md)).
-- **B13 alerts fire on every matching item — no watchlist yet (by design; ADR 0023).** The
-  `sec_filing`/`cve_watch` rules alert on **every** filing/CVE in the scan window (not just watched
-  issuers / critical CVSS); a per-issuer/CVSS watchlist (the spec's `nvd_critical_watch` flavour) is
-  a later refinement. `macro_release`/`freshness` carry their evidence in `detail` (empty
-  `evidence_doc_ids` — they have no backing document). The `freshness` dedupe is per
-  `(source, status)`, so a flap back into the same status won't re-alert until the row is pruned.
-  Alert **lifecycle** transitions (acknowledge/resolve) have no CLI yet, and delivery is
-  fire-and-record (a failed send stays undelivered for the next run; no backoff). `atlas alerts run`
-  drives evaluation; the timed `job_type=alert` lands with the scheduler block.
+- **Alert watchlist + lifecycle — RESOLVED in B18.** `cve_watch`/`sec_filing` now fire only on
+  watched/critical items when an active `watchlist.yaml` is present (CVSS via an NVD body marker;
+  absent/inactive ⇒ fire-on-everything, backward compatible); `atlas alerts ack|resolve|list` drive
+  the lifecycle ([ADR 0029](decisions/0029-b18-alert-watchlist-and-lifecycle.md)). Remaining (by
+  design): `macro_release`/`freshness` carry evidence in `detail` (no backing document); the
+  `freshness` dedupe is per `(source, status)`; delivery is fire-and-record (no backoff); the timed
+  `job_type=alert` lands with the B19 scheduler.
 - **B12 summary backend is a deterministic extractive baseline (by design; ADR 0022).** The
   `local` backend (`ExtractiveSummarizer`) takes each document's leading sentence(s) and cites them
   to the internal doc id — useful and honest, but **not an abstractive narrative** until a real

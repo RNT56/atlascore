@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from atlascore.alerts.rules.base import AlertCandidate
+from atlascore.core.errors import AlertTransitionError
 from atlascore.schemas import SCHEMA_VERSION
 from atlascore.schemas.alert import SEVERITY_ORDER, AlertStatus
 from atlascore.security.secrets import sanitize_for_storage
@@ -67,6 +68,42 @@ def mark_delivered(session: Session, alert: Alert, *, status: str, now: datetime
     """Record a delivery attempt's outcome on the alert."""
     alert.delivered_at = now
     alert.delivery_status = status
+
+
+def _transition(
+    session: Session, alert_id: UUID, *, allowed_from: set[str], to: AlertStatus
+) -> Alert:
+    """Move an alert to ``to`` if its current status is in ``allowed_from``; else raise. Caller's txn."""
+    alert = session.get(Alert, alert_id)
+    if alert is None:
+        raise AlertTransitionError(f"alert {alert_id} not found")
+    if alert.status == AlertStatus.PURGED.value:
+        raise AlertTransitionError(f"alert {alert_id} is purged (terminal) and cannot transition")
+    if alert.status not in allowed_from:
+        raise AlertTransitionError(
+            f"alert {alert_id} is {alert.status!r}; cannot move to {to.value!r} "
+            f"(allowed from {sorted(allowed_from)})"
+        )
+    alert.status = to.value
+    session.flush()
+    return alert
+
+
+def acknowledge_alert(session: Session, alert_id: UUID) -> Alert:
+    """``open`` → ``acknowledged``. Caller manages the transaction."""
+    return _transition(
+        session, alert_id, allowed_from={AlertStatus.OPEN.value}, to=AlertStatus.ACKNOWLEDGED
+    )
+
+
+def resolve_alert(session: Session, alert_id: UUID) -> Alert:
+    """``open``/``acknowledged`` → ``resolved``. Caller manages the transaction."""
+    return _transition(
+        session,
+        alert_id,
+        allowed_from={AlertStatus.OPEN.value, AlertStatus.ACKNOWLEDGED.value},
+        to=AlertStatus.RESOLVED,
+    )
 
 
 @dataclass(frozen=True)

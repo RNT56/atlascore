@@ -30,6 +30,18 @@ components, not new sources/services).
 
 ### Added
 
+- **B18 — alert maturity: watchlist gating + lifecycle** ([ADR 0029](docs/decisions/0029-b18-alert-watchlist-and-lifecycle.md)).
+  - Git-tracked `watchlist.yaml` (`schemas/watchlist.py` + `storage/watchlist.py`, `WATCHLIST_PATH`):
+    `cve_watch` fires only on watched/critical CVEs (CVSS ≥ floor / watched severity / cve_id /
+    keyword — severity derived from the CVSS band) and `sec_filing` only on watched issuers (CIK,
+    optional form). An absent/inactive watchlist preserves the pre-B18 fire-on-everything behaviour
+    (`build_rules(watchlist)`; `ALL_RULES` stays ungated for tests). No migration, no DB table.
+  - The NVD connector surfaces CVSS (v3.1→v3.0→v2) into the document body as a parser-safe marker
+    (`CVSS base score <n> (<SEVERITY>).`) so the rule can gate on it without a schema change.
+  - Alert lifecycle (`storage.alerts.acknowledge_alert`/`resolve_alert`, reusing the existing
+    `status` column; `AlertTransitionError` on illegal/terminal moves) + `atlas alerts
+    ack|resolve|list`. MCP `get_alerts` is unchanged (read-only).
+
 - **B17 — time_series_point yearly partitions** ([ADR 0028](docs/decisions/0028-b17-time-series-yearly-partitions.md)).
   - Migration `0010` carves the deploy-time current + next calendar year into bounded
     `time_series_point_<year>` partitions via the detach-DEFAULT / create-bounded-child /

@@ -1,0 +1,20 @@
+# AtlasCore alert watchlist (B18) — git-tracked governed config (code-not-data, ADR 0029).
+#
+# Gates the cve_watch + sec_filing alert rules so they fire only on WATCHED items. An absent or
+# inactive (enabled: false / no criteria) watchlist preserves the pre-B18 fire-on-everything
+# behaviour. No secrets, no private endpoints (CLAUDE.md §16). Relocate via WATCHLIST_PATH.
+enabled: true
+
+cve:
+  # Fire a cve_watch alert when ANY criterion matches: CVSS >= min_cvss, or the NVD baseSeverity is
+  # in `severities`, or the CVE id is in `cve_ids`, or a keyword appears in the title/body.
+  min_cvss: 9.0
+  severities: [CRITICAL]
+  cve_ids: []
+  keywords: []
+
+sec:
+  # Fire a sec_filing alert only for these issuers (by CIK; leading zeros optional) — optionally
+  # narrowed to specific forms. Empty `forms` matches any form for a watched issuer.
+  ciks: ["320193"] # Apple Inc. (matches sources/sec_edgar_apple.yaml)
+  forms: ["10-K", "10-Q", "8-K"]

@@ -186,7 +186,9 @@ def test_get_alerts_mcp_tool(migrated_engine: Engine) -> None:
     with Session(migrated_engine) as session, session.begin():
         _cleanup(session)
         ids = _seed(session)
-    run_alerts(migrated_engine, channel=LogChannel())  # evaluate + deliver
+    # Ungated rules (fire-on-everything) — this test asserts all 4 alert types appear; watchlist
+    # gating is exercised separately in test_alerts_lifecycle.py (B18).
+    run_alerts(migrated_engine, rules=ALL_RULES, channel=LogChannel())  # evaluate + deliver
 
     server = build_mcp_server(migrated_engine)
     _b, payload = asyncio.run(server.call_tool(TOOL_GET_ALERTS, {"limit": 100}))

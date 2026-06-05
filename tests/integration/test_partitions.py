@@ -27,12 +27,15 @@ pytestmark = pytest.mark.integration
 
 NOW = datetime.now(UTC)  # migration carved current+next from the same clock domain
 CUR = NOW.year
+FAR_YEAR = CUR + 5  # uncarved year used by the with-rows move test
 PROVIDER = "part_it"
 SERIES = "PARTCPI"
 
 
 def _cleanup(session: Session) -> None:
     session.execute(text("DELETE FROM time_series_point WHERE provider = :p"), {"p": PROVIDER})
+    # Drop the with-rows-test partition so the move is exercised fresh on every (re-)run.
+    session.execute(text(f"DROP TABLE IF EXISTS {partition_name(FAR_YEAR)}"))
 
 
 def _obs(year: int, value: str) -> Observation:
@@ -82,7 +85,7 @@ def test_observations_route_to_correct_child_and_read_back(migrated_engine: Engi
 
 
 def test_with_rows_move_out_of_default_and_idempotent(migrated_engine: Engine) -> None:
-    far_year = CUR + 5  # uncarved → lands in DEFAULT initially
+    far_year = FAR_YEAR  # uncarved → lands in DEFAULT initially
     with Session(migrated_engine) as session, session.begin():
         _cleanup(session)
         upsert_observations(

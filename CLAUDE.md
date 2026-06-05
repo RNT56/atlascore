@@ -262,7 +262,9 @@ atlas crawl once <source_id>                # enqueue + RUN one crawl job (needs
 atlas parse <raw_id>                         # (re)parse a raw document
 atlas search "<query>" [--source <slug>] [--since <date>] [--until <date>] [--limit N]   # FTS over documents; sanitized snippet + provenance (B6)
 atlas enrich <doc_id>                        # run enrichment for a document
-atlas alerts run                             # evaluate alert rules
+atlas alerts run                             # evaluate alert rules (watchlist-gated; B18)
+atlas alerts ack|resolve <alert_id>          # alert lifecycle: open -> acknowledged -> resolved (B18)
+atlas alerts list [--status][--type][--min-severity][--since][--limit]   # list alerts (control-plane read)
 atlas health                                 # source_health + crawl_job DLQ depth + worker/scheduler liveness
 atlas digest                                 # emit the daily digest via the alert delivery channel
 atlas mcp dev                                # run the MCP server over stdio for development

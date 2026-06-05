@@ -72,16 +72,50 @@ class NvdCveConnector(Connector):
             if not cve_id:
                 continue
             description = _english_description(cve.get("descriptions"))
+            # Surface CVSS into the body as a parser-safe marker so the cve_watch rule (B18) can gate
+            # on it without a schema change — the score/severity otherwise never reach the document.
+            score, severity = _cvss(cve)
+            body: str | None = description
+            if score is not None:
+                marker = f"CVSS base score {score} ({severity or _band(score)})."
+                body = f"{marker} {description}" if description else marker
             entries.append(
                 FeedEntry(
                     guid=str(cve_id),
                     link=f"{_DETAIL_BASE}/{cve_id}",
                     title=str(cve_id),
                     published=_parse_datetime(cve.get("published")),
-                    content_html=description,
+                    content_html=body,
                 )
             )
         return entries
+
+
+def _cvss(cve: dict[str, Any]) -> tuple[float | None, str | None]:
+    """Extract (baseScore, baseSeverity) from CVSS v3.1 → v3.0 → v2 (severity may be derived)."""
+    metrics = cve.get("metrics")
+    if not isinstance(metrics, dict):
+        return None, None
+    for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+        entries = metrics.get(key)
+        if isinstance(entries, list) and entries and isinstance(entries[0], dict):
+            data = entries[0].get("cvssData")
+            if isinstance(data, dict) and isinstance(data.get("baseScore"), int | float):
+                score = float(data["baseScore"])
+                sev = data.get("baseSeverity")
+                return score, str(sev).upper() if isinstance(sev, str) else _band(score)
+    return None, None
+
+
+def _band(score: float) -> str:
+    """NVD qualitative band for a base score (used when baseSeverity is absent, e.g. CVSS v2)."""
+    if score >= 9.0:
+        return "CRITICAL"
+    if score >= 7.0:
+        return "HIGH"
+    if score >= 4.0:
+        return "MEDIUM"
+    return "LOW"
 
 
 def _english_description(descriptions: object) -> str | None:

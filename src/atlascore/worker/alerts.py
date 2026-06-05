@@ -16,11 +16,12 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from atlascore.alerts.delivery import DeliveryChannel, get_delivery_channel
-from atlascore.alerts.rules import ALL_RULES, AlertRule
+from atlascore.alerts.rules import AlertRule, build_rules
 from atlascore.core.clock import Clock, SystemClock
 from atlascore.core.logging import get_logger
 from atlascore.storage.alerts import mark_delivered, undelivered_alerts, upsert_alert
 from atlascore.storage.postgres.models import Alert
+from atlascore.storage.watchlist import load_watchlist
 
 _log = get_logger("atlascore.worker.alerts")
 
@@ -77,7 +78,8 @@ def run_alerts(
 ) -> AlertRunResult:
     """Evaluate rules then deliver pending alerts. The `atlas alerts run` control-plane entry point."""
     clock = clock or SystemClock()
-    rules = rules if rules is not None else ALL_RULES
+    # Live path: gate the document rules by the git-tracked watchlist (B18). Tests inject `rules`.
+    rules = rules if rules is not None else build_rules(load_watchlist())
     channel = channel or get_delivery_channel()
 
     with Session(engine) as session, session.begin():

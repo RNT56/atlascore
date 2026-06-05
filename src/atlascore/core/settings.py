@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     audit_routine_retention: str = "180d"
     crawl_job_retention: str = "90d"
 
+    # --- Alert watchlist (B18; git-tracked governed config, default ./watchlist.yaml) ---
+    watchlist_path: Path | None = None
+
     # --- Logging ---
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
