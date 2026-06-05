@@ -18,6 +18,7 @@ EmbeddingBackend = Literal["local", "sentence-transformers", "openai", "google"]
 LlmBackend = Literal["local", "api", "none"]
 LlmProvider = Literal["openai", "anthropic", "google"]
 NerBackend = Literal["rules", "spacy"]
+TikaMode = Literal["none", "subprocess", "server"]
 AppEnv = Literal["dev", "staging", "prod", "ci"]
 
 
@@ -69,6 +70,17 @@ class Settings(BaseSettings):
 
     # --- NER backend (B21; `rules` = deterministic default, `spacy` needs the local-embeddings extra) ---
     ner_backend: NerBackend = "rules"
+
+    # --- SEC full-filing extraction via sandboxed Tika (B22) ---
+    # `none` (default) = metadata-only filings (CI/sandbox-safe). `subprocess` = a resource-limited,
+    # non-root, network-less `java -jar tika-app.jar --text`. `server` = a localhost tika-server.
+    tika_mode: TikaMode = "none"
+    tika_jar_path: Path | None = None  # path to tika-app.jar (subprocess mode)
+    tika_server_url: str | None = None  # e.g. http://127.0.0.1:9998 (server mode)
+    tika_timeout_seconds: float = 30.0
+    tika_max_bytes: int = 16 * 1024 * 1024  # cap extracted-text size (16 MiB)
+    tika_rlimit_as_bytes: int = 1024 * 1024 * 1024  # subprocess address-space cap (1 GiB)
+    tika_rlimit_cpu_seconds: int = 60  # subprocess CPU-time cap
 
     # --- HTTP fetcher (transparent project UA + contact; never browser-impersonating) ---
     default_user_agent: str = "AtlasCore/0.0 (single-operator research; contact: you@example.com)"

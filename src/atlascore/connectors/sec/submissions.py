@@ -4,7 +4,14 @@ Fetches the public ``/submissions/CIK##########.json`` endpoint for one company 
 ``source.config.params.cik``) and turns each recent filing into a `FeedEntry` (accession number =
 GUID, the primary-document URL = link, form + company = title, a short description = body). The
 shared `ArticleParser` then produces the sanitized `document` body, so filings are searchable via
-``search_documents`` (B10 "basic"; full filing-document extraction via Tika is out of scope).
+``search_documents``.
+
+**Full-filing extraction (B22, opt-in).** When the source sets ``fetch.params.extract_filings:
+'true'`` AND a sandboxed Tika is available (``TIKA_MODE``), :meth:`extract_filing` fetches a filing's
+primary document (PDF/HTML) through the same SSRF-guarded fetcher and runs it through the sandboxed
+:class:`FilingParser` to produce a full-text body. When Tika is absent or the flag is off it returns
+``None`` and the connector falls back to the metadata-only body (exact B10 behaviour) — so CI and the
+sandbox stay green without Java.
 
 SEC requires a descriptive **User-Agent with a contact** (sent as ``DEFAULT_USER_AGENT``) and a
 **10 req/s** limit (the source's `rate_limit`, enforced by the single fetch worker). No API key.
@@ -19,10 +26,17 @@ from typing import Any
 from atlascore.connectors_sdk.base import Connector, FetchContext
 from atlascore.connectors_sdk.fetcher import SafeFetcher
 from atlascore.connectors_sdk.types import FeedEntry, FetchOutcome
-from atlascore.core.errors import ConfigError
+from atlascore.core.errors import ConfigError, FetchError, SecurityError, SsrfError
+from atlascore.core.logging import get_logger
+from atlascore.parsers.filing import FilingParser
+from atlascore.security.sandbox import tika_available
 
 # The filing archive lives on www.sec.gov; the submissions JSON on data.sec.gov (the base_url).
 _ARCHIVE_BASE = "https://www.sec.gov/Archives/edgar/data"
+# MIME types accepted when fetching a filing's primary document for Tika extraction (B22).
+_FILING_MIME = frozenset({"application/pdf", "text/html", "application/xhtml+xml", "text/plain"})
+
+_log = get_logger("atlascore.connectors.sec")
 
 
 class SecSubmissionsConnector(Connector):
@@ -30,6 +44,40 @@ class SecSubmissionsConnector(Connector):
 
     name = "sec_submissions"
     accepted_mime_types = frozenset({"application/json", "text/json"})
+
+    def extract_filing(
+        self,
+        fetcher: SafeFetcher,
+        ctx: FetchContext,
+        url: str,
+        *,
+        filing_parser: FilingParser | None = None,
+    ) -> str | None:
+        """Full-text-extract a filing's primary doc via sandboxed Tika; ``None`` to fall back (B22).
+
+        Returns ``None`` (metadata-only fallback) when the source hasn't opted in
+        (``params.extract_filings != 'true'``), when Tika isn't available, or when the
+        fetch/extraction fails (never propagates — a bad filing must not fail the whole crawl).
+        """
+        if ctx.params.get("extract_filings") != "true" or not tika_available():
+            return None
+        try:
+            outcome = fetcher.fetch(
+                url,
+                timeout=ctx.timeout,
+                max_requests=ctx.max_requests,
+                window_seconds=ctx.window_seconds,
+                accept_mime=_FILING_MIME,
+            )
+            if outcome.not_modified or not outcome.content:
+                return None
+            parsed = (filing_parser or FilingParser()).parse(
+                outcome.content, content_type=outcome.mime_type
+            )
+            return parsed.body_text or None
+        except (FetchError, SsrfError, SecurityError, ConfigError) as exc:
+            _log.warning("sec_filing_extract_failed", url=url, error=str(exc))
+            return None
 
     def fetch(self, fetcher: SafeFetcher, ctx: FetchContext) -> FetchOutcome:
         cik = ctx.params.get("cik")

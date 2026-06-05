@@ -346,28 +346,38 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-- **Post-MVP upgrade cycle (B16–B22)** — claimed by session (AI) 2026-06-05. A grounded, dependency-
+- _(nothing in progress — the B16–B22 post-MVP cycle is complete; see below.)_
+
+## Done — Post-MVP upgrade cycle (B16–B22)
+
+- **Post-MVP upgrade cycle (B16–B22)** — completed by session (AI) 2026-06-05. A grounded, dependency-
   ordered roadmap (planned via a multi-agent design workflow). These are **depth on existing
   components**, not new sources/services, so the §5 freeze (which gates *new sources/services*) is
-  respected. Executing in order, each an independently-committed block:
+  respected. Each was an independently-committed block (code + migration + tests + docs + ADR + gates):
   - **B16** audit_log rotation + crawl_job prune (`atlas audit rotate`; no DDL) — ✅ **DONE**.
   - **B17** `time_series_point` yearly partitions + partition mgmt (migration 0010; `JobType.PARTITION`) — ✅ **DONE**.
   - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`) — ✅ **DONE**.
   - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone — ✅ **DONE**.
   - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011) — ✅ **DONE**.
   - **B21** real embedding/LLM backends + spend-cap ledger + spaCy NER + `atlas reindex-embeddings` (migration 0012) — ✅ **DONE**.
-  - **B22** SEC full-filing via sandboxed Tika + FilingParser (graceful metadata fallback; no DDL).
+  - **B22** SEC full-filing via sandboxed Tika + FilingParser (graceful metadata fallback; no DDL) — ✅ **DONE**.
 
 ---
 
 ## Next
 
-**Active cycle: B16–B22 (post-MVP upgrade), see In progress.** Migrations sequence: 0010 (B17),
-0011 (B20), 0012 (B21). Heavy/cloud paths (B21 sentence-transformers/cloud + B22 Tika/Java) keep the
-deterministic offline default as the CI path and are contract-tested with respx + import guards.
+**The B16–B22 post-MVP upgrade cycle is COMPLETE** (migrations 0010 (B17) / 0011 (B20) / 0012 (B21)
+all applied; drift-free). Heavy/cloud paths (B21 sentence-transformers/cloud + B22 Tika/Java) keep the
+deterministic offline default as the CI path and are contract-tested with respx + import guards. The
+7-tool MCP surface stayed stable across the whole cycle.
 
-After B22: re-confirm the set runs unattended for a month (§5) before adding any **new source or
-service**. The 7-tool MCP surface is complete and stays stable across this cycle.
+**§5 freeze is now in force.** Per CLAUDE.md §5, **do not add a new source or service** until the
+current set has run **unattended for a month**. The right next step is operational: deploy the B19
+scheduler + worker (one of each, runbook §6C), enable a real embedding/LLM/Tika backend if desired,
+and let it run. Candidate *depth* follow-ups (NOT new sources/services), only if a concrete need
+appears: an embedding-spend ledger (cloud embeddings aren't under the LLM cap yet), an `atlas
+summarize` pre-warm CLI, per-filing second-fetch wiring of B22 extraction into the worker loop, and a
+`source_health` history table. None are started.
 
 ---
 
@@ -497,8 +507,12 @@ service**. The 7-tool MCP surface is complete and stays stable across this cycle
   `SafeFetcher.extra_headers` (setdefault) enables the NVD keyed `apiKey`-header tier (~50 req/30s,
   `sources/nvd_recent_cves_keyed.yaml`; key redacted in logs/columns); NVD + SEC now fetch
   incrementally via the runtime-owned `source.checkpoint` cursor (NVD `lastMod` window, SEC
-  newest-filing filter), re-fetch still idempotent (GUID+hash). **SEC full filing-text extraction
-  (sandboxed Tika) remains for B22** — SEC still produces a per-filing metadata document for now.
+  newest-filing filter), re-fetch still idempotent (GUID+hash).
+- **SEC full filing-text extraction — WIRED in B22** ([ADR 0033](decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).
+  `security.sandbox.tika` (out-of-process, RLIMIT/timeout/non-root, network-less, import-guarded) +
+  `FilingParser` (`filing@1.0.0`) + `SecSubmissionsConnector.extract_filing` (opt-in via
+  `fetch.params.extract_filings: 'true'` + `TIKA_MODE`) extract full filing text, with graceful
+  metadata-only fallback when Tika is absent (the default — so CI/sandbox stay green without Java).
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
   - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
     creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked

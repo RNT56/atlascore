@@ -30,6 +30,18 @@ components, not new sources/services).
 
 ### Added
 
+- **B22 — SEC full-filing extraction via sandboxed Tika** ([ADR 0033](docs/decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).
+  - `atlascore.security.sandbox.tika` (`TikaClient` + `tika_available`): out-of-process,
+    resource-bounded (`RLIMIT_AS`/`RLIMIT_CPU` + timeout, fixed argv, no shell, no network, non-root)
+    Apache Tika — `subprocess` (`java -jar tika-app.jar --text`) or localhost `server` mode;
+    `none` default. All heavy imports are lazy so it imports with no Java (`tika_available` → False).
+  - `atlascore.parsers.filing.FilingParser` (`filing@1.0.0`): Tika text → control-char/whitespace
+    cleaned `ParsedFiling` (Tika client dependency-injected for tests).
+  - `SecSubmissionsConnector.extract_filing(...)`: opt-in via `fetch.params.extract_filings: 'true'`
+    + `tika_available()`; fetches the primary filing doc through the same SSRF-guarded fetcher (PDF/HTML
+    MIME allowlist) and extracts full text, else returns `None` and falls back to the B10 metadata
+    body (a bad filing never fails the crawl; CI/sandbox stay green without Java). New `TIKA_*` settings.
+
 - **B21 — real embedding/LLM backends + hard spend cap + spaCy NER + reindex** ([ADR 0032](docs/decisions/0032-b21-real-backends-spend-cap-spacy-reindex.md)).
   - Embeddings: `EMBEDDING_BACKEND=sentence-transformers` (real local, import-guarded) and
     `openai`/`google` cloud backends over httpx (respx-tested; vector dim validated == `EMBEDDING_DIM`,

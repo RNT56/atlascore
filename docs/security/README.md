@@ -192,6 +192,8 @@ Risky files/attachments are size- and MIME-checked before being handed to a pars
 
 There is **no HTML/browser source in the MVP (B1-B15)**, so no Playwright sandbox is wired into the default pipeline yet; this section is the contract for the day one is approved.
 
+**Tika — as-built (B22, [ADR 0033](../decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).** `security.sandbox.tika` makes the §8 contract concrete for SEC full-filing extraction. `subprocess` mode runs `java -jar tika-app.jar --text` with: a `preexec_fn` applying `RLIMIT_AS` (`TIKA_RLIMIT_AS_BYTES`, default 1 GiB) + `RLIMIT_CPU` (`TIKA_RLIMIT_CPU_SECONDS`, default 60s); a wall-clock `TIKA_TIMEOUT_SECONDS`; fixed argv with **no shell**; piped stdin / capped stdout (`TIKA_MAX_BYTES`); **no network** (file-in/text-out). `server` mode targets a **localhost** `tika-server` only. Run the JVM **non-root** in deployment (systemd `User=`/a dedicated account). `tika_available()` gates every call (jar+`java` present, or a server URL); `TIKA_MODE=none` (default) means filings stay metadata-only, so CI and the sandbox never invoke Java. A filing is fetched through the same SSRF-guarded fetcher (PDF/HTML MIME allowlist) before extraction, and any failure falls back to metadata (a hostile filing never fails the crawl).
+
 ---
 
 ## 6. Rate-Limit Safety and the Per-Host Limiter (Spec 5 / R5)
