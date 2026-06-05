@@ -21,11 +21,32 @@ worker**, the **B6 full-text search query path + `atlas search` CLI**, the **B7 
 time-series (`time_series_point` + FRED connector + `get_macro_series`)**, the **B10 SEC EDGAR
 + NVD document connectors**, the **B11 enrichment subsystem (language → NER → topics →
 embeddings + `entity`/`mention`/`embedding` + `get_entity_mentions`)**, the **B12 summaries
-pipeline (`summary` table + content-hash cache + `get_document_summary`)**, and the **B13 alert
-subsystem (`alert` table + four rule-based alerts + delivery + `get_alerts`)**. The MVP continues at
-block **B14**.
+pipeline (`summary` table + content-hash cache + `get_document_summary`)**, the **B13 alert
+subsystem (`alert` table + four rule-based alerts + delivery + `get_alerts`)**, and the **B14
+backups + restore drill + `atlas purge` (full R3 erasure cascade)**. The MVP continues at block
+**B15** (the final hardening block).
 
 ### Added
+
+- **B14 — backups + restore drill + `atlas purge` erasure** ([ADR 0024](docs/decisions/0024-b14-purge-cascade-backups-and-restore-drill.md)).
+  - **`atlas purge <doc_id|entity_id> --yes`** (`atlascore.storage.purge`): the audited right-to-
+    erasure path (R3) — the single exception to raw-store immutability. A document purge runs the
+    full cascade in one transaction: `embedding` → `mention` → `summary` (`document_id` **OR**
+    `member_doc_ids[]` — the **multi-doc-summary** case) → `document` (drops it from FTS) →
+    `raw_document` (file + row, **only when no other document references the shared raw**) → alert
+    `evidence_doc_ids` reconciliation (an alert losing all evidence ⇒ `status='purged'`) → a
+    **retained** `audit_log` entry (`retention_class='purge'`, content hashes + counts only, never
+    personal data). An entity purge deletes the entity + its mentions and reconciles
+    `document.entity_ids[]`; documents survive. Idempotent (a missing target is a clean no-op).
+  - **`RawStore.delete`** — the single place a raw blob is removed (idempotent), reachable only from
+    the purge path.
+  - **`atlas backup`** (`atlascore.cli.backup`): an on-demand local snapshot (custom-format
+    `pg_dump` + a copy of the content-addressed raw store) with the DB password passed via
+    `PGPASSWORD`, never argv (§14). Offsite sync + retention + the nightly timer remain
+    `infra/backup.sh`.
+  - **`infra/restore_drill.sh`** — restores a dump into a throwaway scratch DB, runs sanity counts
+    (incl. that `retention_class='purge'` audit rows survive a restore), and drops the scratch DB;
+    never touches the live database. (Satisfies "test a restore once", SPEC B14.)
 
 - **B13 — rule-based alerts + delivery + `get_alerts`** ([ADR 0023](docs/decisions/0023-b13-rule-based-alerts-delivery-and-get-alerts.md)).
   - **`alert` table** (migration `0009`, normal `op.create_table` — autogenerate/drift-checked):

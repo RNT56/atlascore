@@ -381,11 +381,15 @@ restart.
 
 ### 4.1 `atlas backup`
 
-The canonical entry point is `atlas backup`. It performs the dump and the offsite sync and
-records an `audit_log` entry (`action='backup'`, `actor='cli'`).
+`atlas backup` (B14) takes an **on-demand local snapshot** under `--output-dir/<UTC-timestamp>/`:
+a custom-format `pg_dump` (`atlascore-pg.dump`) plus a copy of the immutable, content-addressed raw
+store. The DB password is passed via `PGPASSWORD` (never argv, §14). **Offsite sync + retention +
+the nightly timer are `infra/backup.sh`** (§4.2) — the operational path; `atlas backup` is the
+convenient local snapshot that the restore drill (§5) reads. (Errors cleanly if `pg_dump` is not on
+PATH.) Implemented in [ADR 0024](../decisions/0024-b14-purge-cascade-backups-and-restore-drill.md).
 
 ```bash
-atlas backup
+atlas backup --output-dir /var/backups/atlascore
 ```
 
 ### 4.2 `infra/backup.sh` (what `atlas backup` orchestrates / cron fallback)
@@ -589,8 +593,13 @@ reconciled by the purge job itself):
    recomputed from surviving members later).
 4. Remove the document from FTS (drop/clear the `tsvector` row).
 5. Delete the `document` row.
-6. Delete the `raw_document` **file on disk** (`raw_document.path`) **and** the
-   `raw_document` row. This is the one place raw immutability is broken, and only here.
+6. Delete the `raw_document` **file on disk** (`raw_document.path`) **and** the `raw_document`
+   row — **but only when no other `document` still references it** (B14). One raw blob (a whole RSS
+   feed / SEC submissions payload) backs **many** documents (one fetch → N per-GUID documents → one
+   raw), and the FK is `RESTRICT`, so the raw is erased only when the **last** referencing document
+   is purged; until then it is retained (it still holds the purged item's bytes among its siblings).
+   This is the one place raw immutability is broken, and only here (`RawStore.delete`, the single
+   blob deleter — [ADR 0024](../decisions/0024-b14-purge-cascade-backups-and-restore-drill.md)).
 7. Scan `alert.evidence_doc_ids[]` and remove `<doc_id>`. If an alert loses **all** evidence,
    set its `status='purged'`.
 8. Write a **retained** `audit_log` entry: `action='purge'`, `actor='cli'`,

@@ -8,7 +8,30 @@
 
 ## Current phase
 
-**Block B13 — DONE (2026-06-04). Next: B14.**
+**Block B14 — DONE (2026-06-05). Next: B15 (the final MVP block).**
+
+**Backups restore, and the audited erasure path works.** `atlas purge <doc_id|entity_id> --yes`
+(`atlascore.storage.purge`) runs the full R3 cascade in one transaction: `embedding` → `mention` →
+`summary` (`document_id` **OR** `member_doc_ids[]` — the **multi-doc-summary** case, the load-bearing
+regression) → `document` (drops it from FTS) → `raw_document` (file + row, **only when no other
+document references the shared raw** — one feed fetch backs N documents, RESTRICT forbids otherwise)
+→ alert `evidence_doc_ids` reconciliation (an alert losing all evidence ⇒ `status='purged'`) → a
+**retained** `audit_log` entry (`retention_class='purge'`, content hashes + counts only, never
+personal data). An entity purge deletes the entity + its mentions and reconciles
+`document.entity_ids[]`; documents survive. Purge is idempotent. `RawStore.delete` is the single
+blob deleter. `atlas backup` writes a local `pg_dump` + raw-store copy (password via `PGPASSWORD`,
+never argv); `infra/backup.sh` keeps offsite sync + retention; `infra/restore_drill.sh` restores a
+dump into a throwaway scratch DB and verifies it
+([ADR 0024](decisions/0024-b14-purge-cascade-backups-and-restore-drill.md)). **Done-when met:**
+restore verified (live drill: 14 tables + rows restored into a scratch DB) and purge works + is
+audited (verified live incl. the multi-doc-summary regression, shared-raw guard, alert reconciliation,
+idempotency). **289 tests pass**; ruff/mypy clean; no schema change (alert was the last table, B13).
+
+---
+
+### Prior phases
+
+**Block B13 — DONE (2026-06-04).**
 
 **Rule-based alerts fire with dedupe + evidence and are queryable via MCP.** Migration `0009` adds
 the `alert` table (a **normal** `op.create_table` table — autogenerate/drift-checked, unlike the
@@ -26,10 +49,6 @@ caps at 100, resolves evidence→provenance, and is audited
 each alert fires with dedupe + `evidence_doc_ids` and is queryable via MCP — verified live (4 rules
 fire, idempotent re-run creates 0, LogChannel delivery, `get_alerts` + min_severity/type filters).
 **281 tests pass**; ruff/mypy clean; migration `0009` applies + drift-check empty on live PG16.
-
----
-
-### Prior phases
 
 **Block B12 — DONE (2026-06-04).**
 
@@ -297,46 +316,52 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-*(none)* — B13 closed. B14 not yet claimed.
+*(none)* — B14 closed. B15 not yet claimed.
 
 ---
 
 ## Next
 
-**B14 — Backups + restore drill + `atlas purge` (erasure incl. raw + full cascade R3, incl. the
-multi-doc summary).**
+**B15 — Hardening: security regressions + README + end-to-end smoke/demo (the final MVP block).**
 
-B13 completed the read surfaces. B14 adds backup/restore + the audited erasure path (CLAUDE.md §16
-R3, §12, runbooks):
+B1–B14 built the whole pipeline. B15 hardens and demonstrates it (CLAUDE.md §15 backlog, §19):
 
-1. **Backups** (`infra/backup.sh`, `atlas backup`) — nightly `pg_dump` + `rclone`/`rsync` of the
-   raw store offsite; **a tested restore drill** (restore into a scratch DB + raw dir, verify).
-2. **`atlas purge <doc_id|entity_id>`** — the audited erasure path (the **one** exception to raw
-   immutability). Given a `doc_id`, the **full R3 cascade**: delete `embedding` + `mention` rows;
-   delete every `summary` where `document_id = doc_id` **OR** `doc_id = ANY(member_doc_ids)`
-   (the multi-doc-summary case — `document_id` is null there, so the `GIN(member_doc_ids)` scan is
-   load-bearing); remove from FTS (drop the `document` row); delete the `raw_document` file + row;
-   scan `alert.evidence_doc_ids[]` and remove the id (an alert losing ALL evidence ⇒
-   `status=purged`); write a **RETAINED** `audit_log` entry (`retention_class='purge'`) recording
-   action + hashes (never the personal data). Given an `entity_id`: delete the `entity` + its
-   `mention`s; documents survive. Purge is idempotent.
-3. **A purge regression test MUST cover a multi-doc summary** (R3) — the load-bearing case.
+1. **Security regression suite** (CLAUDE.md §19.5) — consolidate + extend the SSRF, sanitizer,
+   **secrets-in-logs AND `crawl_job.last_error`/`audit_log.detail` columns**, and prompt-injection
+   regressions into a clear hardening suite (much already exists across B4/B5/B7 — gather + fill
+   gaps), plus confirm the **purge multi-doc-summary** regression (B14) is part of it.
+2. **README** — project overview + quickstart (`make dev`/`migrate`/`seed`, `atlas` tour, the MCP
+   surface), reconciled with the as-built system.
+3. **End-to-end smoke/demo** (`make smoke`) — source → ingest (fetch→parse→enrich) → search → MCP
+   summary → alert, unattended, with a backup + restore, in one runnable path.
 
-**Definition of done for B14:** restore verified; purge works and is audited.
+**Definition of done for B15:** source → ingest → search → MCP summary → alert runs unattended, with
+backups, and the security regressions are green — completing the MVP (B1–B15).
 
-Build-order reminders: B15 hardening — security regressions (SSRF / sanitizer / secrets-in-logs +
-columns / prompt-injection) + README + end-to-end smoke/demo (source → ingest → search → MCP summary
-→ alert, unattended, with backups). Still pending after the MVP: the **scheduler** block (timed
-`freshness`/`alert` jobs + daily FRED/EDGAR/NVD fetches + the fetch→parse→enrich worker loop +
-single-scheduler liveness), `time_series_point` **yearly partitions**, SEC full-filing (Tika) + NVD
-keyed tier, a **real embedding backend** (sentence-transformers/cloud), a **real LLM summary backend**
-(`LLM_BACKEND=api` + spend-cap enforcement), and an alert **watchlist** + lifecycle CLI
-(acknowledge/resolve).
+Still pending after the MVP (post-B15, deliberately deferred — see Known issues): the **scheduler**
+block (timed `freshness`/`alert` jobs + daily FRED/EDGAR/NVD fetches + the fetch→parse→enrich worker
+loop + single-scheduler liveness + the `audit_log` rotation that keeps only `retention_class='purge'`),
+`time_series_point` **yearly partitions**, SEC full-filing (Tika) + NVD keyed tier, a **real embedding
+backend** (sentence-transformers/cloud), a **real LLM summary backend** (`LLM_BACKEND=api` + spend-cap
+enforcement), and an alert **watchlist** + lifecycle CLI (acknowledge/resolve).
 
 ---
 
 ## Known issues
 
+- **B14 shared-raw erasure is deferred to the last reference (by design; ADR 0024).** One
+  `raw_document` (a whole RSS feed / SEC submissions blob) backs **many** documents, and the FK is
+  `RESTRICT`, so `atlas purge <doc>` deletes the raw file/row **only when no other document
+  references it**. Until the last sibling is purged, the shared raw still holds the purged item's
+  bytes among its siblings (honest limitation; the normalized personal data IS erased immediately).
+- **B14 `atlas backup` needs `pg_dump` on PATH; the restore drill is a script, not a CI job.**
+  `atlas backup` errors cleanly if `pg_dump` is absent (`infra/backup.sh` is the canonical
+  operational path); `infra/restore_drill.sh` is run on demand / in the deploy runbook (it needs
+  `pg_dump`/`pg_restore` + a scratch DB). The B14 restore was verified live against the throwaway
+  PG16 container (14 tables + rows restored into a scratch DB).
+- **No `audit_log` rotation job yet** — purge entries are flagged `retention_class='purge'` (retained
+  forever) and routine entries accumulate; the rotation that deletes only `routine` rows beyond the
+  window lands with the scheduler block.
 - **B13 alerts fire on every matching item — no watchlist yet (by design; ADR 0023).** The
   `sec_filing`/`cve_watch` rules alert on **every** filing/CVE in the scan window (not just watched
   issuers / critical CVSS); a per-issuer/CVSS watchlist (the spec's `nvd_critical_watch` flavour) is

@@ -68,3 +68,15 @@ class RawStore:
 
     def exists(self, digest: str) -> bool:
         return (self.root / self._relpath(digest)).exists()
+
+    def delete(self, relpath: str) -> bool:
+        """Delete a stored blob by relative path. Idempotent (missing file is a no-op).
+
+        **The only place a raw blob is removed** — reachable solely from the audited ``atlas purge``
+        path (R3, §12), and only once the last ``document`` referencing the raw is gone. Returns
+        True if a file was actually removed.
+        """
+        full = self.root / relpath
+        existed = full.exists()
+        full.unlink(missing_ok=True)
+        return existed

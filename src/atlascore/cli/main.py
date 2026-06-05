@@ -13,11 +13,13 @@ from typing import Annotated
 import typer
 
 from atlascore.cli.alerts import alerts_app
+from atlascore.cli.backup import backup_cmd
 from atlascore.cli.crawl import crawl_app
 from atlascore.cli.enrich import enrich_cmd
 from atlascore.cli.health import digest_cmd, health_cmd
 from atlascore.cli.mcp import mcp_app
 from atlascore.cli.parse import parse_raw
+from atlascore.cli.purge import purge_cmd
 from atlascore.cli.search import search_cmd
 from atlascore.cli.source import source_app
 
@@ -36,6 +38,8 @@ app.command(name="enrich")(enrich_cmd)
 app.command(name="search")(search_cmd)
 app.command(name="health")(health_cmd)
 app.command(name="digest")(digest_cmd)
+app.command(name="backup")(backup_cmd)
+app.command(name="purge")(purge_cmd)
 
 
 def _version() -> str:
