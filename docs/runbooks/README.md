@@ -23,6 +23,7 @@
 5. [Restore Drill (RPO 24h / RTO < 1 day)](#5-restore-drill-rpo-24h--rto--1-day)
 6. [`atlas purge` / Right-to-Erasure (full cascade R3)](#6-atlas-purge--right-to-erasure-full-cascade-r3)
 6A. [Audit-Log Rotation and crawl_job Pruning (B16)](#6a-audit-log-rotation-and-crawl_job-pruning-b16)
+6B. [Time-Series Partition Management (B17)](#6b-time-series-partition-management-b17)
 7. [DLQ Inspection and Requeue](#7-dlq-inspection-and-requeue)
 8. [Stale-Source Handling (cooling_down + digest)](#8-stale-source-handling-cooling_down--digest)
 9. [Onboarding a New Source (default-deny → approved)](#9-onboarding-a-new-source-default-deny--approved)
@@ -692,6 +693,34 @@ psql "${DATABASE_URL/+psycopg/}" -c "SELECT status, count(*) FROM crawl_job GROU
 See [ADR 0027](../decisions/0027-audit-rotation-and-crawl-job-retention.md). Cross-refs: §6 (purge —
 the other retained-audit path) and §14 (secrets hygiene — `detail` is sanitized before write, so
 backups of the audit table are clean).
+
+---
+
+## 6B. Time-Series Partition Management (B17)
+
+**Goal:** keep `time_series_point` carved into **yearly** partitions (with `time_series_point_default`
+as the catch-all) so the time-series stays prunable/queryable at volume. Migration 0010 carves the
+current + next year at deploy time; this routine keeps the next year ahead.
+
+```bash
+atlas tsp partitions status                  # list children + per-child row counts + next-year presence
+atlas tsp partitions ensure                  # idempotently carve current + next year (DEFAULT retained)
+atlas tsp partitions ensure --years-ahead 2  # carve further ahead
+```
+
+`ensure` uses the safe **detach-DEFAULT → create-bounded-child → move-matching-rows → re-attach-DEFAULT**
+dance (so it works even when DEFAULT already holds rows for the year), under a dedicated `partition`
+advisory lock. It is idempotent. The B19 scheduler runs `worker.partitions.run_partition_maintenance`
+as a monthly `job_type=partition` job; until then run it from cron:
+
+```cron
+# monthly: keep next-year partition ahead
+0 3 1 * *  cd /opt/atlascore && atlas tsp partitions ensure >> /var/log/atlascore/partitions.log 2>&1
+```
+
+> systemd alternative: an `atlascore-partitions.timer` (`OnCalendar=monthly`) + oneshot service
+> running `atlas tsp partitions ensure`. This is the one routine that *moves* time-series rows
+> (raw_document blobs remain immutable). See [ADR 0028](../decisions/0028-b17-time-series-yearly-partitions.md).
 
 ---
 

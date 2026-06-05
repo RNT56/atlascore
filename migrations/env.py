@@ -60,6 +60,8 @@ def _is_raw_sql_table(table_name: str | None) -> bool:
     """True for a table whose DDL is hand-written in a migration (not autogenerate-managed)."""
     if table_name is None:
         return False
+    # The ``time_series_point`` prefix also covers the yearly child partitions added in migration
+    # 0010 (``time_series_point_<year>``) and the DEFAULT partition — all stay drift-excluded.
     return table_name.startswith("time_series_point") or table_name in _RAW_SQL_TABLES
 
 

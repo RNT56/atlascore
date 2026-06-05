@@ -350,8 +350,8 @@ until the current set runs unattended for a month before adding sources or servi
   ordered roadmap (planned via a multi-agent design workflow). These are **depth on existing
   components**, not new sources/services, so the §5 freeze (which gates *new sources/services*) is
   respected. Executing in order, each an independently-committed block:
-  - **B16** audit_log rotation + crawl_job prune (`atlas audit rotate`; no DDL) — *in progress*.
-  - **B17** `time_series_point` yearly partitions + partition mgmt (migration 0010; `JobType.PARTITION`).
+  - **B16** audit_log rotation + crawl_job prune (`atlas audit rotate`; no DDL) — ✅ **DONE**.
+  - **B17** `time_series_point` yearly partitions + partition mgmt (migration 0010; `JobType.PARTITION`) — ✅ **DONE**.
   - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`).
   - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone.
   - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011).
@@ -477,10 +477,11 @@ service**. The 7-tool MCP surface is complete and stays stable across this cycle
 - **Scheduler-liveness half of the digest is a placeholder (B8)** — only fetch-worker presence is
   checked (via `pg_locks` on the fetch advisory lock); the single-scheduler liveness check lands
   with the scheduler block.
-- **`time_series_point` uses a single DEFAULT partition (B9)** — correct and adequate at
-  single-operator scale, but real RANGE partitioning (yearly) for time-series volume is a documented
-  later refinement (a partition-management runbook). The composite-PK + `NULLS NOT DISTINCT`
-  invariants are already enforced on the parent.
+- **`time_series_point` yearly partitions — RESOLVED in B17.** Migration `0010` carves yearly
+  `time_series_point_<year>` partitions (DEFAULT retained as catch-all); `atlas tsp partitions
+  ensure` / `worker.partitions.run_partition_maintenance` (the B19 scheduler's monthly job) keep the
+  next year ahead. Composite-PK + `NULLS NOT DISTINCT` inherited by children
+  ([ADR 0028](decisions/0028-b17-time-series-yearly-partitions.md)).
 - **FRED unit label + vintage are limited in MVP (B9)** — the human `unit` label is operator-supplied
   via `fetch.params.unit` because the observations endpoint omits it (the `/fred/series` metadata
   fetch is a follow-up); `kind` is `observation` only and `vintage` is null (market `bar`/OHLCV and

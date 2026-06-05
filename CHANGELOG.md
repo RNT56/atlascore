@@ -30,6 +30,17 @@ components, not new sources/services).
 
 ### Added
 
+- **B17 — time_series_point yearly partitions** ([ADR 0028](docs/decisions/0028-b17-time-series-yearly-partitions.md)).
+  - Migration `0010` carves the deploy-time current + next calendar year into bounded
+    `time_series_point_<year>` partitions via the detach-DEFAULT / create-bounded-child /
+    move-matching-rows / re-attach-DEFAULT **with-rows dance** (DEFAULT retained as catch-all; parent
+    composite PK + `NULLS NOT DISTINCT` natural key inherited), and widens the `crawl_job` job_type
+    CHECK to accept the new `JobType.PARTITION`. Downgrades cleanly to the single-DEFAULT topology.
+  - `atlascore.storage.partitions.ensure_yearly_partitions` (idempotent), `worker.partitions.
+    run_partition_maintenance` (advisory-locked), and `atlas tsp partitions status|ensure`. Reads
+    (`get_macro_series`) and writes (`upsert_observations`) route transparently across partitions.
+    All `time_series_point*` children stay excluded from the drift-check by name prefix.
+
 - **B16 — control-plane retention: `atlas audit rotate`** ([ADR 0027](docs/decisions/0027-audit-rotation-and-crawl-job-retention.md)).
   - `atlascore.storage.retention` (pure DML, no schema change): `rotate_audit_log` deletes only
     `retention_class='routine'` audit rows older than the window — filtered on `retention_class`,

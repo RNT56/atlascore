@@ -20,6 +20,7 @@ from atlascore.cli.enrich import enrich_cmd
 from atlascore.cli.health import digest_cmd, health_cmd
 from atlascore.cli.mcp import mcp_app
 from atlascore.cli.parse import parse_raw
+from atlascore.cli.partitions import tsp_app
 from atlascore.cli.purge import purge_cmd
 from atlascore.cli.search import search_cmd
 from atlascore.cli.source import source_app
@@ -34,6 +35,7 @@ app.add_typer(source_app, name="source")
 app.add_typer(crawl_app, name="crawl")
 app.add_typer(alerts_app, name="alerts")
 app.add_typer(audit_app, name="audit")
+app.add_typer(tsp_app, name="tsp")
 app.add_typer(mcp_app, name="mcp")
 app.command(name="parse")(parse_raw)
 app.command(name="enrich")(enrich_cmd)

@@ -13,6 +13,9 @@ class JobType(StrEnum):
     ENRICH = "enrich"
     ALERT = "alert"
     FRESHNESS = "freshness"
+    # Control-plane time-series partition maintenance (B17); the job_type CHECK is widened in
+    # migration 0010 to accept this value.
+    PARTITION = "partition"
 
 
 class JobStatus(StrEnum):
