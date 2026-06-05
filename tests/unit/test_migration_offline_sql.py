@@ -25,7 +25,8 @@ def _offline_sql() -> str:
     buf = io.StringIO()
     cfg = Config(str(_REPO_ROOT / "alembic.ini"), output_buffer=buf)
     # A dummy URL keeps env.py from resolving Settings/DATABASE_URL; offline mode never connects.
-    cfg.set_main_option("sqlalchemy.url", "postgresql+psycopg://u:p@localhost/atlascore")
+    # No userinfo (no `user:pass@`) so it isn't a detect-secrets basic-auth false positive.
+    cfg.set_main_option("sqlalchemy.url", "postgresql+psycopg://localhost/atlascore")
     command.upgrade(cfg, "head", sql=True)  # raises if any migration can't render offline
     return buf.getvalue()
 
