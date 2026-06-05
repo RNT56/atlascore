@@ -24,6 +24,7 @@
 6. [`atlas purge` / Right-to-Erasure (full cascade R3)](#6-atlas-purge--right-to-erasure-full-cascade-r3)
 6A. [Audit-Log Rotation and crawl_job Pruning (B16)](#6a-audit-log-rotation-and-crawl_job-pruning-b16)
 6B. [Time-Series Partition Management (B17)](#6b-time-series-partition-management-b17)
+6C. [Running the Daemons: Scheduler + Worker (B19)](#6c-running-the-daemons-scheduler--worker-b19)
 7. [DLQ Inspection and Requeue](#7-dlq-inspection-and-requeue)
 8. [Stale-Source Handling (cooling_down + digest)](#8-stale-source-handling-cooling_down--digest)
 9. [Onboarding a New Source (default-deny → approved)](#9-onboarding-a-new-source-default-deny--approved)
@@ -721,6 +722,45 @@ as a monthly `job_type=partition` job; until then run it from cron:
 > systemd alternative: an `atlascore-partitions.timer` (`OnCalendar=monthly`) + oneshot service
 > running `atlas tsp partitions ensure`. This is the one routine that *moves* time-series rows
 > (raw_document blobs remain immutable). See [ADR 0028](../decisions/0028-b17-time-series-yearly-partitions.md).
+>
+> **B19 note:** once `atlas scheduler run` is deployed (§6C) it runs partition maintenance inline on
+> the `PARTITION_INTERVAL_SECONDS` cadence, so the cron/timer above is only needed if you are not
+> running the scheduler.
+
+---
+
+## 6C. Running the Daemons: Scheduler + Worker (B19)
+
+AtlasCore runs unattended from **two** long-lived processes (B19, [ADR 0030](../decisions/0030-b19-scheduler-and-worker-loop.md)):
+
+- **`atlas scheduler run`** — EXACTLY ONE instance (holds the scheduler advisory lock; a second is
+  refused). Each tick it enqueues due per-source fetch jobs (cron from each source's
+  `config.schedule`, idempotent per tick bucket) and runs freshness/alert/partition/audit
+  housekeeping **inline** on their cadences. When it is running you do **not** also need the §6A/§6B
+  cron timers.
+- **`atlas worker run`** — drains fetch→parse→enrich. Run ONE fetch worker (it holds the single-fetch
+  lock, R16); you may add parse/enrich-only workers (`--role parse --role enrich`) to scale out.
+
+Both shut down cleanly on SIGINT/SIGTERM (releasing their locks). Verify with `atlas health` /
+`atlas digest` (the *Liveness* line reports scheduler + fetch-worker presence).
+
+```ini
+# /etc/systemd/system/atlascore-scheduler.service  (single instance — the invariant)
+[Service]
+ExecStart=/opt/atlascore/.venv/bin/atlas scheduler run
+EnvironmentFile=/etc/atlascore/.env
+Restart=on-failure
+
+# /etc/systemd/system/atlascore-worker.service  (single fetch worker — R16)
+[Service]
+ExecStart=/opt/atlascore/.venv/bin/atlas worker run
+EnvironmentFile=/etc/atlascore/.env
+Restart=on-failure
+```
+
+> **Single-scheduler + single-fetch invariants (§17):** never enable a second scheduler unit or a
+> second fetch worker. The advisory locks refuse the second process, but keep the deployment to one
+> of each regardless. Cadences are tuned via the `*_INTERVAL_SECONDS` env knobs (`.env.example`).
 
 ---
 

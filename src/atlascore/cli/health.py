@@ -22,6 +22,7 @@ from atlascore.alerts.delivery import get_delivery_channel
 from atlascore.cli._db import session_or_exit
 from atlascore.core.clock import SystemClock
 from atlascore.core.logging import get_logger
+from atlascore.scheduler.lock import scheduler_active
 from atlascore.schemas.source_health import HealthStatus
 from atlascore.storage.queue import dead_job_summary
 from atlascore.storage.source_health import SourceHealthRow, list_source_health
@@ -63,6 +64,7 @@ def build_digest(
     dlq: list[tuple[str, str, int]],
     *,
     fetch_worker_up: bool,
+    scheduler_up: bool = False,
     now: datetime,
 ) -> str:
     """Render the daily digest text (pure; testable). ``rows`` are the non-ok sources."""
@@ -84,7 +86,7 @@ def build_digest(
     lines.append("")
     lines.append(
         f"Liveness: fetch worker {'present' if fetch_worker_up else 'NOT detected'}; "
-        "scheduler check lands with the scheduler."
+        f"scheduler {'present' if scheduler_up else 'NOT detected'}."
     )
     return "\n".join(lines)
 
@@ -119,6 +121,7 @@ def health_cmd(
         rows = list_source_health(session)
         dlq = dead_job_summary(session)
         worker_up = fetch_worker_active(session)
+        scheduler_up = scheduler_active(session)
 
     if not rows:
         typer.echo("no sources registered")
@@ -134,6 +137,7 @@ def health_cmd(
     for name, job_type, count in dlq:
         typer.echo(f"  {count}x {job_type}  {name}")
     typer.echo(f"Fetch worker: {'present' if worker_up else 'NOT detected'}")
+    typer.echo(f"Scheduler: {'present' if scheduler_up else 'NOT detected'}")
 
 
 def digest_cmd() -> None:
@@ -143,4 +147,7 @@ def digest_cmd() -> None:
         rows = _refresh_then_read(session, now=now, statuses=_PROBLEM_STATUSES)
         dlq = dead_job_summary(session)
         worker_up = fetch_worker_active(session)
-    deliver_digest(build_digest(rows, dlq, fetch_worker_up=worker_up, now=now))
+        scheduler_up = scheduler_active(session)
+    deliver_digest(
+        build_digest(rows, dlq, fetch_worker_up=worker_up, scheduler_up=scheduler_up, now=now)
+    )

@@ -52,19 +52,21 @@ def test_build_digest_lists_problem_sources() -> None:
         _row("fail_src", "cooling_down", None, 3),
     ]
     dlq = [("Failing Source", "fetch", 3)]
-    text = build_digest(rows, dlq, fetch_worker_up=False, now=NOW)
+    text = build_digest(rows, dlq, fetch_worker_up=False, scheduler_up=False, now=NOW)
     assert "Sources needing attention (2)" in text
     assert "stale_src" in text and "stale" in text
     assert "fail_src" in text and "cooling_down" in text
     assert "DLQ depth: 3" in text
     assert "fetch worker NOT detected" in text
+    assert "scheduler NOT detected" in text  # B19: real liveness, not a placeholder
 
 
 def test_build_digest_all_ok() -> None:
-    text = build_digest([], [], fetch_worker_up=True, now=NOW)
+    text = build_digest([], [], fetch_worker_up=True, scheduler_up=True, now=NOW)
     assert "all ok" in text
     assert "DLQ depth: 0" in text
     assert "fetch worker present" in text
+    assert "scheduler present" in text
 
 
 def test_health_and_digest_help() -> None:

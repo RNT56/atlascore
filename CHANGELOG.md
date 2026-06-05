@@ -30,6 +30,19 @@ components, not new sources/services).
 
 ### Added
 
+- **B19 — single-instance scheduler + continuous worker loop** ([ADR 0030](docs/decisions/0030-b19-scheduler-and-worker-loop.md)).
+  - `atlas scheduler run` (`scheduler.run`): holds a dedicated scheduler advisory lock (a second
+    instance is refused, single-scheduler invariant §17), enqueues one **tick-bucketed** fetch job
+    per due source (cron from `source.config['schedule']`, idempotent across overlapping ticks,
+    default-deny), and runs **freshness/alert/partition/audit housekeeping inline** on independent
+    cadences (system-wide tasks have no `source_id`, so they run inline rather than as queued jobs —
+    no migration). `scheduler.cron` (`is_due`/`next_due_after`/`tick_bucket`) + `scheduler.lock`.
+  - `atlas worker run [--role …]` (`worker.loop`): drains fetch→parse→enrich via the existing
+    `run_one_*` claimers with a bounded idle backoff and periodic stale-claim reclaim; the **fetch**
+    role holds the single-fetch lock (R16). Graceful SIGINT/SIGTERM shutdown; DI fetcher for tests.
+  - `atlas health`/`atlas digest` now report **real scheduler liveness** (`scheduler_active`),
+    replacing the B8 placeholder. New scheduler/worker cadence settings in `.env.example`.
+
 - **B18 — alert maturity: watchlist gating + lifecycle** ([ADR 0029](docs/decisions/0029-b18-alert-watchlist-and-lifecycle.md)).
   - Git-tracked `watchlist.yaml` (`schemas/watchlist.py` + `storage/watchlist.py`, `WATCHLIST_PATH`):
     `cve_watch` fires only on watched/critical CVEs (CVSS ≥ floor / watched severity / cve_id /

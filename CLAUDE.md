@@ -272,6 +272,8 @@ atlas backup                                 # pg_dump + raw-store sync
 atlas purge <doc_id|entity_id>               # deletion / PII erasure (full cascade R3; audited)
 atlas audit rotate [--dry-run]               # rotate routine audit_log + prune terminal crawl_job (R14; purge retained)
 atlas tsp partitions status|ensure           # time_series_point yearly partition management (B17)
+atlas scheduler run                          # single-instance scheduler: due fetches + inline housekeeping (B19)
+atlas worker run [--role fetch|parse|enrich] # continuous fetch->parse->enrich drain loop (B19)
 ```
 
 If a command doesn't exist yet, add it (CLI is the control plane) or report the actual command used. `atlas health`/`atlas digest` are control-plane and MCP-independent.

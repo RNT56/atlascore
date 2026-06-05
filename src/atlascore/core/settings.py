@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     # --- Alert watchlist (B18; git-tracked governed config, default ./watchlist.yaml) ---
     watchlist_path: Path | None = None
 
+    # --- Scheduler + worker loop (B19; all seconds; the scheduler runs housekeeping inline on
+    # cadence buckets and enqueues per-source fetch jobs; the worker drains fetch→parse→enrich) ---
+    scheduler_tick_seconds: int = 60
+    freshness_interval_seconds: int = 900  # refresh source_health every 15m
+    alert_interval_seconds: int = 300  # evaluate + deliver alerts every 5m
+    partition_interval_seconds: int = 86400  # ensure yearly partitions daily
+    audit_rotation_interval_seconds: int = 86400  # rotate audit_log / prune crawl_job daily
+    worker_idle_backoff_max_seconds: float = 30.0  # cap the drain loop's idle sleep
+
     # --- Logging ---
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 

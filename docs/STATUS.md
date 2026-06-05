@@ -353,7 +353,7 @@ until the current set runs unattended for a month before adding sources or servi
   - **B16** audit_log rotation + crawl_job prune (`atlas audit rotate`; no DDL) — ✅ **DONE**.
   - **B17** `time_series_point` yearly partitions + partition mgmt (migration 0010; `JobType.PARTITION`) — ✅ **DONE**.
   - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`) — ✅ **DONE**.
-  - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone.
+  - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone — ✅ **DONE**.
   - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011).
   - **B21** real embedding/LLM backends + spend-cap ledger + spaCy NER + `atlas reindex-embeddings` (migration 0012).
   - **B22** SEC full-filing via sandboxed Tika + FilingParser (graceful metadata fallback; no DDL).
@@ -386,14 +386,19 @@ service**. The 7-tool MCP surface is complete and stays stable across this cycle
 - **Audit/crawl_job retention — RESOLVED in B16.** `atlas audit rotate` (`storage.retention`) deletes
   only `retention_class='routine'` audit rows beyond `AUDIT_ROUTINE_RETENTION` (purge rows retained
   forever, R14) and prunes terminal `crawl_job` rows beyond `CRAWL_JOB_RETENTION`. The B19 scheduler
-  will drive the daily cadence ([ADR 0027](decisions/0027-audit-rotation-and-crawl-job-retention.md)).
+  drives the daily cadence inline ([ADR 0027](decisions/0027-audit-rotation-and-crawl-job-retention.md)).
 - **Alert watchlist + lifecycle — RESOLVED in B18.** `cve_watch`/`sec_filing` now fire only on
   watched/critical items when an active `watchlist.yaml` is present (CVSS via an NVD body marker;
   absent/inactive ⇒ fire-on-everything, backward compatible); `atlas alerts ack|resolve|list` drive
   the lifecycle ([ADR 0029](decisions/0029-b18-alert-watchlist-and-lifecycle.md)). Remaining (by
   design): `macro_release`/`freshness` carry evidence in `detail` (no backing document); the
-  `freshness` dedupe is per `(source, status)`; delivery is fire-and-record (no backoff); the timed
-  `job_type=alert` lands with the B19 scheduler.
+  `freshness` dedupe is per `(source, status)`; delivery is fire-and-record (no backoff). Timed alert
+  evaluation now runs inline in the B19 scheduler (`atlas scheduler run`) on the alert cadence.
+- **Unattended operation — DELIVERED in B19.** `atlas scheduler run` (single-instance, advisory-locked)
+  enqueues due fetches + runs freshness/alert/partition/audit inline; `atlas worker run` drains
+  fetch→parse→enrich (fetch under the single-fetch lock). `atlas health`/`atlas digest` report real
+  scheduler liveness ([ADR 0030](decisions/0030-b19-scheduler-and-worker-loop.md)). Deploy both as
+  systemd units / compose services (one scheduler, one fetch worker) — see the runbook.
 - **B12 summary backend is a deterministic extractive baseline (by design; ADR 0022).** The
   `local` backend (`ExtractiveSummarizer`) takes each document's leading sentence(s) and cites them
   to the internal doc id — useful and honest, but **not an abstractive narrative** until a real

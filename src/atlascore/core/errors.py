@@ -37,3 +37,7 @@ class FetchWorkerBusyError(AtlasError):
 
 class AlertTransitionError(AtlasError):
     """An illegal alert lifecycle transition (e.g. resolving a purged/terminal alert)."""
+
+
+class SchedulerBusyError(AtlasError):
+    """Another scheduler instance already holds the single-scheduler lock (§17)."""
