@@ -34,6 +34,7 @@ from atlascore.schemas import SCHEMA_VERSION
 from atlascore.schemas.crawl_job import JobType
 from atlascore.schemas.source import PolicyStatus
 from atlascore.security.secrets import resolve_credential, sanitize_for_storage
+from atlascore.storage.checkpoints import get_checkpoint, set_checkpoint
 from atlascore.storage.postgres.models import CrawlJob, RawDocument, Source
 from atlascore.storage.queue import claim_next, complete, enqueue, fail
 from atlascore.storage.rawstore import RawStore
@@ -135,6 +136,7 @@ def run_fetch_job(
         .limit(1)
     )
     rate_limit = source.rate_limit or {}
+    checkpoint = get_checkpoint(session, source.id)  # B20: runtime incremental cursor
     ctx = FetchContext(
         feed_url=source.base_url,
         etag=last_raw.etag if last_raw else None,
@@ -146,6 +148,8 @@ def run_fetch_job(
         # RSS ignores them.
         params=config.get("params") or {},
         credential=resolve_credential(source.credential_ref),
+        checkpoint=checkpoint,
+        now=clock.now(),
     )
 
     outcome = connector.fetch(fetcher, ctx)
@@ -173,7 +177,7 @@ def run_fetch_job(
         session.add(raw_doc)
         session.flush()
 
-    entries = connector.parse_entries(outcome.content)
+    entries = connector.filter_entries(connector.parse_entries(outcome.content), checkpoint)
     slug = config.get("slug") or str(source.id)
     new_entries = 0
     for entry in entries:
@@ -198,6 +202,12 @@ def run_fetch_job(
         )
         if already is None:
             new_entries += 1
+
+    # B20: persist the connector's next incremental cursor (default None ⇒ RSS/FRED unchanged), in
+    # this same job txn so the cursor only advances on a fully-processed fetch.
+    next_cp = connector.next_checkpoint(outcome.content, checkpoint)
+    if next_cp is not None:
+        set_checkpoint(session, source.id, next_cp)
     return FetchJobResult(False, new_entries, len(entries), raw_doc.id)
 
 

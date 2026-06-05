@@ -71,10 +71,15 @@ class SafeFetcher:
         window_seconds: float = 1.0,
         accept_mime: frozenset[str] | None = None,
         max_bytes: int = DEFAULT_MAX_BYTES,
+        extra_headers: dict[str, str] | None = None,
     ) -> FetchOutcome:
         """Fetch ``url`` with conditional headers, SSRF-validating every hop. Raises
         :class:`SsrfError` on a disallowed target and :class:`FetchError` on a bad
-        status / MIME / size or too many redirects."""
+        status / MIME / size or too many redirects.
+
+        ``extra_headers`` (e.g. an ``apiKey`` auth header, B20) are merged via ``setdefault`` — they
+        can NEVER override the managed ``User-Agent``/conditional cache headers (a poisoned param
+        can't strip the project UA or rewrite the ETag cache), and are re-applied on every hop."""
         current = url
         for _hop in range(self._max_redirects + 1):
             target = assert_url_allowed(current, resolver=self._resolver)  # scheme + IP validation
@@ -91,6 +96,10 @@ class SafeFetcher:
                 headers["If-None-Match"] = etag
             if last_modified:
                 headers["If-Modified-Since"] = last_modified
+            if extra_headers:
+                # setdefault: callers add auth/custom headers but can't clobber the managed ones.
+                for key, value in extra_headers.items():
+                    headers.setdefault(key, value)
             # Stream so the body is read (and decoded) incrementally under the size cap.
             with self._client.stream(
                 "GET", current, headers=headers, follow_redirects=False, timeout=timeout

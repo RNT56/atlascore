@@ -25,6 +25,7 @@ EXPECTED_COLUMNS = {
     "retention",
     "freshness",
     "config",
+    "checkpoint",  # B20: runtime-owned incremental crawl cursor (migration 0011)
     "parser_ref",
     "credential_ref",
     "enabled",

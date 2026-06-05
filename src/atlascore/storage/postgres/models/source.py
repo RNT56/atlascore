@@ -57,6 +57,10 @@ class Source(Base):
     config: Mapped[dict[str, Any]] = mapped_column(
         JSONB(), nullable=False, server_default=text("'{}'::jsonb")
     )
+    # Runtime-owned incremental crawl cursor (B20). NULL = no cursor yet (full fetch). Unlike
+    # ``config`` (the lossless YAML round-trip home, overwritten on every `atlas source sync`),
+    # ``checkpoint`` is never written by the YAML loader — only by the worker after a fetch.
+    checkpoint: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
     parser_ref: Mapped[str | None] = mapped_column(Text(), nullable=True)
     credential_ref: Mapped[str | None] = mapped_column(Text(), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))

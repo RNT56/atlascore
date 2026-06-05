@@ -157,8 +157,21 @@ Multi-table canonical writes happen in **one transaction**.
 
 Persists what's needed to resume incrementally without re-fetching: the response
 `ETag` and `Last-Modified` on the `raw_document`, plus any provider cursor /
-high-water mark in the `crawl_job.payload` or a small per-source state. Idempotent:
-crash-and-restart resumes from the last checkpoint.
+high-water mark. Idempotent: crash-and-restart resumes from the last checkpoint.
+
+**As-built (B20, [ADR 0031](../decisions/0031-b20-connector-depth-headers-keyed-nvd-checkpoint.md)):**
+the provider cursor lives in the dedicated **`source.checkpoint` jsonb** column (runtime-owned;
+written only by the worker, never by `atlas source sync`), via `storage.checkpoints`. A connector
+opts in through two hooks: `next_checkpoint(content, prior)` (the cursor to persist after a
+successful fetch) and `filter_entries(entries, checkpoint)` (skip already-seen items — an
+optimisation; the parse-job dedupe stays the correctness gate). The worker injects the cursor into
+`FetchContext.checkpoint` before fetch and persists `next_checkpoint` in the job's transaction.
+- **NVD** windows server-side: `lastModStartDate` (from the cursor) + `lastModEndDate`
+  (`FetchContext.now`); the **keyed tier** sends `credential_ref` → `NVD_API_KEY` as the `apiKey`
+  header via `SafeFetcher.extra_headers` (the key is redacted in logs/columns).
+- **SEC** records the newest `filingDate`/accession and filters strictly-older filings (keeping
+  same-day so nothing unseen is missed).
+- **RSS/FRED** keep the ETag/Last-Modified path (the hooks default to no-ops).
 
 ### 3.7 `healthcheck()` — feed source_health
 

@@ -40,7 +40,7 @@ _KV_RE = re.compile(
     r"([\"'][^\"']*[\"']|[^\s,;&'\"]+)"
 )
 _HEADER_RE = re.compile(
-    r"(?im)^(\s*(?:authorization|cookie|set-cookie|proxy-authorization)\s*:\s*).+$"
+    r"(?im)^(\s*(?:authorization|cookie|set-cookie|proxy-authorization|apikey|x-api-key)\s*:\s*).+$"
 )
 _BEARER_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]+")
 

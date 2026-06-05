@@ -1,0 +1,30 @@
+# AtlasCore source registry — NVD recent CVEs, KEYED tier (CVE 2.0 JSON API).
+#
+# Policy note (operator): same public NVD service as `nvd_recent_cves`, but using the higher-rate
+# KEYED tier — NVD's documented ~50 requests / 30-second window when a personal API key is sent as
+# the `apiKey` HEADER (B20). The key is resolved at runtime from the env var named by
+# `credentials.ref` (NVD_API_KEY) — the YAML holds the env-KEY NAME, never the value (CLAUDE.md §3).
+# The resolved key is sent only as a request header and is never logged or stored
+# (sanitize_for_storage redacts it). Run EITHER this source OR the keyless one, not both.
+
+id: nvd_recent_cves_keyed
+name: NVD — recent CVEs (keyed tier)
+category: security_cve
+access_method: api
+base_url: https://services.nvd.nist.gov
+enabled: false   # opt-in: enable once NVD_API_KEY is set in the environment
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+# Keyed NVD limit: ~50 requests per 30-second rolling window.
+rate_limit: { max_requests: 50, window_seconds: 30 }
+freshness: { target: "12h", warn_after: "24h", error_after: "48h" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: NVD_API_KEY }   # env-key NAME only; resolved + sent as the `apiKey` header
+fetch:
+  connector: atlascore.connectors.nvd.cves:NvdCveConnector
+  schedule: "*/30 * * * *"
+  timeout_seconds: 30
+  params:
+    results_per_page: "100"

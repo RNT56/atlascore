@@ -30,6 +30,19 @@ components, not new sources/services).
 
 ### Added
 
+- **B20 — connector depth: custom headers + NVD keyed tier + incremental checkpoint** ([ADR 0031](docs/decisions/0031-b20-connector-depth-headers-keyed-nvd-checkpoint.md)).
+  - `SafeFetcher.fetch(..., extra_headers=)` merges caller headers via `setdefault` (re-applied per
+    redirect hop) — they can never clobber the managed `User-Agent`/conditional cache headers.
+  - **NVD keyed tier:** `NvdCveConnector` sends the resolved credential as the `apiKey` header
+    (NIST ~50 req/30s) when `credential_ref` is set; `sources/nvd_recent_cves_keyed.yaml` (+ `NVD_API_KEY`)
+    opts in. The key never reaches logs/columns (`sanitize_for_storage` redacts the dict + header-line
+    forms; `_HEADER_RE` extended with `apikey`/`x-api-key`).
+  - **Incremental fetch:** new nullable `source.checkpoint` jsonb (migration `0011`) — a runtime-owned
+    cursor written only by the worker (never by the YAML loader, unlike `config`). `storage.checkpoints`
+    + the `Connector.next_checkpoint`/`filter_entries` hooks (default no-ops) drive NVD server-side
+    windowing (`lastModStartDate`/`lastModEndDate`) and SEC newest-filing filtering; the worker injects
+    the cursor into `FetchContext` and persists it in the job txn. Re-fetch stays idempotent (GUID+hash).
+
 - **B19 — single-instance scheduler + continuous worker loop** ([ADR 0030](docs/decisions/0030-b19-scheduler-and-worker-loop.md)).
   - `atlas scheduler run` (`scheduler.run`): holds a dedicated scheduler advisory lock (a second
     instance is refused, single-scheduler invariant §17), enqueues one **tick-bucketed** fetch job

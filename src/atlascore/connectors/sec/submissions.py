@@ -87,6 +87,45 @@ class SecSubmissionsConnector(Connector):
             )
         return entries
 
+    def filter_entries(
+        self, entries: list[FeedEntry], checkpoint: dict[str, Any]
+    ) -> list[FeedEntry]:
+        """Skip filings strictly older than the cursor (B20 optimisation; dedupe stays correctness).
+
+        Keeps same-day filings (>= cursor date) so an unseen filing filed on the cursor's own day is
+        never missed; the parse-job dedupe_key drops the already-seen ones. Entries with no date are
+        kept (can't compare). The full ``recent`` array is always re-fetched (SEC has no date param);
+        this only trims how many *stale* parse jobs we re-enqueue each tick.
+        """
+        cursor = checkpoint.get("last_filing_date")
+        if not cursor:
+            return entries
+        kept = []
+        for e in entries:
+            if e.published is None or e.published.date().isoformat() >= cursor:
+                kept.append(e)
+        return kept
+
+    def next_checkpoint(self, content: bytes, prior: dict[str, Any]) -> dict[str, Any] | None:
+        """Record the newest filingDate (+ its accession) seen, for the next tick's filter."""
+        try:
+            data = json.loads(content)
+            recent = (data.get("filings") or {}).get("recent") or {}
+        except (json.JSONDecodeError, AttributeError):
+            return None
+        dates = recent.get("filingDate") or []
+        accessions = recent.get("accessionNumber") or []
+        if not dates:
+            return None
+        newest_idx = max(range(len(dates)), key=lambda i: dates[i] or "")
+        newest_date = dates[newest_idx]
+        if not newest_date:
+            return None
+        cp: dict[str, Any] = {"last_filing_date": newest_date}
+        if newest_idx < len(accessions):
+            cp["last_accession"] = accessions[newest_idx]
+        return cp
+
 
 def _filing_url(cik: str, accession: str, primary_doc: str) -> str | None:
     if not cik or not accession:

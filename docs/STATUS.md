@@ -354,7 +354,7 @@ until the current set runs unattended for a month before adding sources or servi
   - **B17** `time_series_point` yearly partitions + partition mgmt (migration 0010; `JobType.PARTITION`) — ✅ **DONE**.
   - **B18** alert maturity — watchlist gating (CVSS) + lifecycle CLI (`atlas alerts ack/resolve/list`) — ✅ **DONE**.
   - **B19** single-instance scheduler + continuous worker loop (wires B16/B17/B18; no DDL) — keystone — ✅ **DONE**.
-  - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011).
+  - **B20** connector depth — SafeFetcher headers + NVD keyed tier + conditional fetch (`source.checkpoint`, migration 0011) — ✅ **DONE**.
   - **B21** real embedding/LLM backends + spend-cap ledger + spaCy NER + `atlas reindex-embeddings` (migration 0012).
   - **B22** SEC full-filing via sandboxed Tika + FilingParser (graceful metadata fallback; no DDL).
 
@@ -492,12 +492,12 @@ service**. The 7-tool MCP surface is complete and stays stable across this cycle
 - **Macro parse runs inline in the fetch worker (B9)** — unlike the scaled-out RSS parse, a macro
   series is parsed + upserted inside the (rate-limited, single) fetch worker. Fine for small series;
   revisit if a high-volume time-series source is added.
-- **SEC is "basic" + NVD is keyless (B10)** — SEC produces a per-filing **metadata** document
-  (form/company/date + link), not full filing-text extraction (sandboxed Tika is a later follow-up).
-  NVD runs the **keyless** tier (~5 req/30 s); the keyed `apiKey`-**header** tier needs custom-header
-  support in `SafeFetcher` (a follow-up). Neither does conditional/incremental requests yet (ETag /
-  `lastMod` cursor) — re-fetch is idempotent (dedupe by GUID + content hash) but re-reads the window.
-  Documented in ADR 0020.
+- **NVD keyed tier + incremental fetch — RESOLVED in B20** ([ADR 0031](decisions/0031-b20-connector-depth-headers-keyed-nvd-checkpoint.md)).
+  `SafeFetcher.extra_headers` (setdefault) enables the NVD keyed `apiKey`-header tier (~50 req/30s,
+  `sources/nvd_recent_cves_keyed.yaml`; key redacted in logs/columns); NVD + SEC now fetch
+  incrementally via the runtime-owned `source.checkpoint` cursor (NVD `lastMod` window, SEC
+  newest-filing filter), re-fetch still idempotent (GUID+hash). **SEC full filing-text extraction
+  (sandboxed Tika) remains for B22** — SEC still produces a per-filing metadata document for now.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
   - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
     creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked

@@ -39,9 +39,22 @@ class NvdCveConnector(Connector):
         per_page = ctx.params.get("results_per_page")
         if per_page:
             query["resultsPerPage"] = per_page
+        # Incremental window (B20): NVD requires lastModStartDate + lastModEndDate together; a
+        # startIndex pages within it. Carried in the runtime checkpoint (never YAML).
+        cp = ctx.checkpoint or {}
+        start = cp.get("lastModStartDate")
+        # NVD requires lastModStartDate + lastModEndDate together; end = the worker's fetch-time now.
+        if start and ctx.now is not None:
+            query["lastModStartDate"] = str(start)
+            query["lastModEndDate"] = ctx.now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000")
+        if cp.get("startIndex"):
+            query["startIndex"] = str(cp["startIndex"])
         url = f"{ctx.feed_url.rstrip('/')}{_CVES_PATH}"
         if query:
             url = f"{url}?{urlencode(query)}"
+        # Keyed tier (B20): send the resolved credential as the `apiKey` HEADER (NIST higher-rate
+        # tier ~50 req/30s). Keyless stays default. The value is never logged (sanitize_for_storage).
+        headers = {"apiKey": ctx.credential} if ctx.credential else None
         return fetcher.fetch(
             url,
             etag=ctx.etag,
@@ -50,7 +63,33 @@ class NvdCveConnector(Connector):
             max_requests=ctx.max_requests,
             window_seconds=ctx.window_seconds,
             accept_mime=self.accepted_mime_types,
+            extra_headers=headers,
         )
+
+    def next_checkpoint(self, content: bytes, prior: dict[str, Any]) -> dict[str, Any] | None:
+        """Record the newest ``lastModified`` seen as the next window's start (B20).
+
+        Returns ``{lastModStartDate, lastModEndDate}`` so the next fetch only asks for CVEs modified
+        after this run. Returns None on an empty/unparseable payload (leave the cursor untouched).
+        """
+        try:
+            data = json.loads(content)
+            vulns = data.get("vulnerabilities") if isinstance(data, dict) else None
+        except (json.JSONDecodeError, AttributeError):
+            return None
+        if not isinstance(vulns, list) or not vulns:
+            return None
+        newest = ""
+        for item in vulns:
+            cve = (item or {}).get("cve") if isinstance(item, dict) else None
+            mod = cve.get("lastModified") if isinstance(cve, dict) else None
+            if isinstance(mod, str) and mod > newest:
+                newest = mod
+        if not newest:
+            return None
+        # NVD's window is inclusive; next start = newest seen. End is left to the worker's "now"
+        # at fetch time — we store start; the connector fills end from start..now on the next run.
+        return {"lastModStartDate": newest}
 
     def parse_entries(self, content: bytes) -> list[FeedEntry]:
         try:

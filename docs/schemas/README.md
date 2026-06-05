@@ -90,6 +90,7 @@ The canonical set is exactly **12 tables**: `source`, `crawl_job`, `raw_document
 | `retention` | `jsonb` | `{raw, normalized, audit?}` — structured, per data-class ([R6](#source-registry-yaml)) |
 | `freshness` | `jsonb` | `{target, warn_after, error_after}` ([R7](#source-registry-yaml)) |
 | `config` | `jsonb` | **Round-trip home** ([R9](#r9-source-table-round-trips-the-yaml)) for `policy.allowed_uses`, `policy.robots`, `fetch.connector` (dotted path:Class), `fetch.schedule` (cron), `fetch.timeout_seconds`. The scheduler reads `config->>'schedule'` for the per-source cron. |
+| `checkpoint` | `jsonb` or `null` | **Runtime-owned incremental crawl cursor (B20, migration `0011`).** NVD's `lastModStartDate`/paging, SEC's newest `filingDate`/accession. Written ONLY by the worker after a successful fetch (`storage.checkpoints`) — **never** by the YAML loader, so `atlas source sync` can't clobber crawl progress. NULL = no cursor yet (full fetch). Distinct from `config` for exactly this reason. ([ADR 0031](../decisions/0031-b20-connector-depth-headers-keyed-nvd-checkpoint.md)) |
 | `parser_ref` | `text` | parser module ref (a parser, **not** the fetch connector) |
 | `credential_ref` | `text` or `null` | names an env key resolved at runtime; **NEVER a secret value** |
 | `enabled` | `bool` | |
