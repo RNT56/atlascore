@@ -100,13 +100,33 @@ class SmtpChannel:
         return "sent"
 
 
+def _clean(value: str | None) -> str:
+    """Normalize a config value to a stripped string; '' means unconfigured.
+
+    A blank ``ALERT_WEBHOOK_URL=`` (shipped in .env.example) loads as ``SecretStr('')`` and a
+    whitespace-only value as ``'   '`` — neither should count as configured. Stripping here makes
+    every channel's selection check (and the value handed to the channel) robust to both.
+    """
+    return value.strip() if value else ""
+
+
 def get_delivery_channel(settings: Settings | None = None) -> DeliveryChannel:
-    """Select the configured channel (webhook → ntfy → SMTP → log fallback)."""
+    """Select the configured channel (webhook → ntfy → SMTP → log fallback).
+
+    Blank/whitespace-only values are treated as unconfigured, so `cp .env.example .env` (which ships
+    every channel blank) falls through to ``LogChannel`` instead of POSTing to an empty URL.
+    """
     settings = settings or get_settings()
-    if settings.alert_webhook_url is not None:
-        return WebhookChannel(settings.alert_webhook_url.get_secret_value())
-    if settings.ntfy_topic:
-        return NtfyChannel(settings.ntfy_topic)
-    if settings.smtp_host and settings.smtp_to and settings.smtp_from:
+    webhook_url = _clean(
+        settings.alert_webhook_url.get_secret_value()
+        if settings.alert_webhook_url is not None
+        else None
+    )
+    if webhook_url:
+        return WebhookChannel(webhook_url)
+    ntfy_topic = _clean(settings.ntfy_topic)
+    if ntfy_topic:
+        return NtfyChannel(ntfy_topic)
+    if _clean(settings.smtp_host) and _clean(settings.smtp_to) and _clean(settings.smtp_from):
         return SmtpChannel(settings)
     return LogChannel()

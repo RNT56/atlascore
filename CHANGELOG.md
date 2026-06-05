@@ -287,6 +287,22 @@ components, not new sources/services).
 
 ### Fixed
 
+- **Alert/digest delivery selected a broken webhook on a blank `ALERT_WEBHOOK_URL`** (found during a
+  full end-to-end run). `get_delivery_channel` gated the webhook with `is not None`, but the empty
+  `ALERT_WEBHOOK_URL=` shipped in `.env.example` loads as `SecretStr('')` — so `cp .env.example .env`
+  produced a `WebhookChannel` pointed at an empty URL, silently breaking alert + digest delivery on
+  first deploy instead of falling back to ntfy/SMTP/LogChannel. An empty webhook secret is now treated
+  as unconfigured, consistent with the ntfy/SMTP branches. A shared `_clean()` helper now strips and
+  truthy-checks **all three** channels, so blank *and* whitespace-only values fall through (and a real
+  webhook URL with stray surrounding whitespace is stripped, not rejected). Regressions
+  `test_empty_webhook_url_is_unconfigured` + `test_whitespace_only_values_are_unconfigured`.
+- **`alembic upgrade head --sql` (offline SQL generation, a CI `migrations` step) crashed** on
+  migration `0010` (time-series yearly partitions), which called `op.get_bind().exec_driver_sql(...)`
+  — there is no live bind under offline mode's `MockConnection`. Both introspection sites are now
+  guarded with `op.get_context().as_sql` (emit the partition DDL unconditionally on the offline/fresh-DB
+  path; the downgrade helper emits nothing for the collapse loop offline). The online path is
+  unchanged. New network-free regression `tests/unit/test_migration_offline_sql.py` renders the whole
+  chain offline. (A migration sweep confirmed `0010` was the only such site.)
 - **CI `secrets-scan`** used a non-existent `detect-secrets --fail-on-unaudited` flag (not in
   detect-secrets 1.5.0); replaced with a baseline re-scan + an explicit gate that fails on any
   unaudited or real finding.

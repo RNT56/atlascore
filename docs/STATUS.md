@@ -2,15 +2,31 @@
 
 > **This is the shared coordination board for every session (human or AI) and every worker.**
 > Read [`../CLAUDE.md`](../CLAUDE.md) and this file before starting. Update it at session close.
-> Last updated: **2026-06-03**.
+> Last updated: **2026-06-05**.
 
 ---
 
 ## Current phase
 
-**Block B15 — DONE (2026-06-05). 🎉 MVP COMPLETE (B1–B15). Scope is now frozen (CLAUDE.md §5).**
+**Post-MVP cycle B16–B22 — DONE (2026-06-05). MVP (B1–B15) complete. Scope frozen (CLAUDE.md §5); the next step is operational — deploy + a month-long unattended soak.**
 
-**The whole pipeline runs unattended, hardened, and demonstrated.** B15 adds the **security
+The post-MVP upgrade cycle **B16–B22** added depth on existing components (not new sources/services, so
+the §5 freeze is respected): audit_log rotation + crawl_job prune (B16), `time_series_point` yearly
+partitions (B17), alert watchlist gating + lifecycle CLI (B18), the single-instance scheduler +
+continuous worker loop (B19), connector depth — custom headers + NVD keyed tier + incremental checkpoint
+(B20), real embedding/LLM backends + a hard spend cap + spaCy NER + `atlas reindex-embeddings` (B21),
+and SEC full-filing extraction via sandboxed Tika (B22). Migrations 0010/0011/0012 applied + drift-free;
+the deterministic offline backends remain the CI default. Full detail in the **Done — Post-MVP upgrade
+cycle (B16–B22)** section below.
+
+**2026-06-05 — full end-to-end run + two delivery/migration bug fixes.** A live run (seed → live Fed RSS
+crawl → parse → enrich → search → 7 MCP tools → alerts → health/digest → backup/restore → purge), plus a
+three-agent adversarial review, surfaced and fixed two real bugs — alert/digest delivery on a
+blank/whitespace channel config, and offline migration SQL (`alembic upgrade head --sql`) crashing on
+migration 0010 (both in Known issues, each with a regression). Full suite **397 passed, 1 skipped**;
+ruff/mypy clean.
+
+**MVP (B1–B15) — the foundation, completed 2026-06-05.** B15 adds the **security
 regression gate** (`make security` → `pytest -m security`): a consolidated
 `tests/unit/test_security_regressions.py` (SSRF incl. DNS-rebinding + metadata + scheme, HTML
 active-content stripping, secrets-never-in-DB-columns over the `crawl_job`/`audit_log` shapes,
@@ -32,11 +48,11 @@ notice + a distinct `mcp_raw_html_returned` audit action), byte-capped by `max_b
 (CLAUDE.md §13 mandates all 7 tools). **306 tests pass**; ruff/mypy clean; drift-check empty on live
 PG16; no schema change.
 
-**The MVP is complete (all 7 MCP tools shipped).** Deferred-past-MVP work (deliberately not started;
-see Known issues): the timed scheduler/worker loop + `audit_log` rotation, real embedding/LLM
-backends, SEC full-filing (Tika) + NVD keyed tier, an alert watchlist + lifecycle CLI, and
-`time_series_point` yearly partitions. Per CLAUDE.md §5, scope is frozen until the current set runs
-unattended for a month.
+**All of B16–B22 has since shipped** (see the cycle summary above and the dedicated section below), so
+the items once "deferred past MVP" — the timed scheduler/worker loop, `audit_log` rotation, real
+embedding/LLM backends, SEC full-filing (Tika), the NVD keyed tier, the alert watchlist + lifecycle CLI,
+and `time_series_point` yearly partitions — are now all DONE. Per CLAUDE.md §5, scope is frozen until the
+current set runs unattended for a month; the next step is operational, not another feature block.
 
 ---
 
@@ -383,6 +399,22 @@ summarize` pre-warm CLI, per-filing second-fetch wiring of B22 extraction into t
 
 ## Known issues
 
+- **Alert/digest delivery on a blank `ALERT_WEBHOOK_URL` — RESOLVED 2026-06-05** (found during a full
+  end-to-end run). `get_delivery_channel` gated the webhook with `is not None`; the empty
+  `ALERT_WEBHOOK_URL=` shipped in `.env.example` loads as `SecretStr('')`, so `cp .env.example .env`
+  silently selected a `WebhookChannel` pointed at an empty URL (alert + digest delivery would fail on
+  first deploy) instead of falling back to ntfy/SMTP/LogChannel. Now an empty webhook secret is treated
+  as unconfigured, consistent with ntfy/SMTP. A shared `_clean()` helper strips + truthy-checks all
+  three channels, so blank *and* whitespace-only values fall through (a real URL with stray surrounding
+  whitespace is stripped, not rejected); regressions `test_empty_webhook_url_is_unconfigured` +
+  `test_whitespace_only_values_are_unconfigured`.
+- **Offline migration SQL (`alembic upgrade head --sql`) crashed on 0010 — RESOLVED 2026-06-05** (found
+  during the same run). Migration `0010` (time-series yearly partitions) called
+  `op.get_bind().exec_driver_sql(...)`, which has no live bind under offline mode's `MockConnection`, so
+  the CI `migrations` "Offline SQL dry run" step would fail. Both introspection sites are now guarded
+  with `op.get_context().as_sql`; the online path is unchanged (live DB already at head). New
+  network-free regression `tests/unit/test_migration_offline_sql.py`. A sweep of migrations 0001–0012
+  confirmed 0010 was the only such site.
 - **B14 shared-raw erasure is deferred to the last reference (by design; ADR 0024).** One
   `raw_document` (a whole RSS feed / SEC submissions blob) backs **many** documents, and the FK is
   `RESTRICT`, so `atlas purge <doc>` deletes the raw file/row **only when no other document

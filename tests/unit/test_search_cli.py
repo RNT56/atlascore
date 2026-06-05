@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
@@ -15,12 +16,17 @@ pytestmark = pytest.mark.unit
 
 runner = CliRunner()
 
+# Rich emits SGR color codes when a color-forcing env (e.g. CI's FORCE_COLOR) is set, which splits
+# option flags like ``--sou\x1b[36mrce`` so a literal substring check fails. Strip ANSI first.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
 
 def test_search_help_lists_options() -> None:
     result = runner.invoke(app, ["search", "--help"])
     assert result.exit_code == 0
+    plain = _ANSI.sub("", result.output)
     for token in ("--source", "--since", "--until", "--limit"):
-        assert token in result.output
+        assert token in plain
 
 
 def test_search_exits_cleanly_without_db(monkeypatch: pytest.MonkeyPatch) -> None:

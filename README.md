@@ -9,7 +9,7 @@ It is **not** a multi-tenant SaaS, **not** a redistribution platform, and **not*
 - **Project / repository / Python distribution name:** `atlascore`
 - **Product / brand name:** AtlasCore *(formerly "AtlasWire" — fully renamed)*
 - **CLI command:** `atlas`
-- **Status:** **MVP complete (B1–B15).** Source → ingest → enrich → search → MCP summary → alert runs unattended, with backups + an audited erasure path; `make smoke` proves it end to end and `make security` runs the hardening suite. See [`docs/STATUS.md`](docs/STATUS.md).
+- **Status:** **MVP (B1–B15) complete + post-MVP cycle (B16–B22) complete.** Source → ingest → enrich → search → MCP summary → alert runs unattended, with backups + an audited erasure path; `make smoke` proves it end to end and `make security` runs the hardening suite. Scope is now frozen (CLAUDE.md §5) — next step is a month-long unattended soak. See [`docs/STATUS.md`](docs/STATUS.md).
 
 ---
 
@@ -30,7 +30,7 @@ Components:
 - **Postgres-backed job queue** (`SELECT ... FOR UPDATE SKIP LOCKED`) with a DLQ status — no external broker.
 - **Immutable raw store** — gzipped, content-addressed payloads on local disk.
 - **One PostgreSQL 16 instance** doing relational + full-text (`tsvector`) + vector (`pgvector`) + partitioned time-series.
-- **Enrichment** — language, NER, topics, embeddings, and cached, cited summaries. MVP ships deterministic, dependency-free default backends (rule-based NER, hashing embeddings, extractive summaries) so it runs offline; spaCy / sentence-transformers / hosted-LLM backends are pluggable behind optional extras with no schema change.
+- **Enrichment** — language, NER, topics, embeddings, and cached, cited summaries. Deterministic, dependency-free default backends (rule-based NER, hashing embeddings, extractive summaries) keep it offline/CI-safe; spaCy NER, sentence-transformers / OpenAI / Google embeddings, and hosted-LLM summaries are now wired (import-guarded, B21), with a hard monthly spend cap on paid calls and `atlas reindex-embeddings` for a model/dim switch.
 - **Rule-based alerts** with dedupe and evidence document IDs, delivered over a webhook / ntfy / SMTP / log channel (which also backs the daily digest).
 - **Read-only MCP server** over stdio — the full 7-tool agent surface (sanitized by default; raw HTML only via the gated, audited `get_raw_document`).
 - **A Typer CLI (`atlas`)** — the only ingestion-management surface; agents never trigger crawls or change source policy.
@@ -160,11 +160,11 @@ Rule: do not add top-level directories without a clear reason.
 
 ## Current status
 
-**MVP complete — backlog blocks B1–B15 are done.** See [`docs/STATUS.md`](docs/STATUS.md) for the live board and [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md) §MVP for the backlog.
+**MVP (B1–B15) done, and the post-MVP cycle (B16–B22) done.** See [`docs/STATUS.md`](docs/STATUS.md) for the live board and [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md) §MVP for the backlog.
 
 The full pipeline works end to end and unattended: an approved source is fetched (SSRF-guarded, conditional), the raw payload is captured immutably, parsed into a canonical `document`, enriched (language → NER → topics → embeddings), indexed for full-text search, summarized (cached + cited), and watched by rule-based alerts — all behind a read-only MCP surface and a `atlas` control-plane CLI, with nightly backups and an audited `atlas purge` erasure path. `make smoke` runs the whole chain; `make security` runs the hardening regressions.
 
-The MCP surface ships the **full 7 read tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`, and `get_raw_document` (sanitized by default; raw HTML only behind its gated, audited `include_raw_html` flag). **Deliberately deferred past the MVP** (see `docs/STATUS.md` Known issues): the timed scheduler/worker loop, real embedding/LLM backends, SEC full-filing (Tika) + NVD keyed tier, an alert watchlist + lifecycle, and `time_series_point` yearly partitions. Scope is frozen until the current set runs unattended for a month.
+The MCP surface ships the **full 7 read tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`, and `get_raw_document` (sanitized by default; raw HTML only behind its gated, audited `include_raw_html` flag). The **post-MVP cycle (B16–B22)** then added depth on existing components (not new sources/services): audit_log rotation + crawl_job prune, `time_series_point` yearly partitions, alert watchlist gating + lifecycle CLI, the single-instance scheduler + continuous worker loop, connector depth (custom headers + NVD keyed tier + incremental checkpoint), real embedding/LLM backends + a hard spend cap + spaCy NER + `atlas reindex-embeddings`, and SEC full-filing extraction via sandboxed Tika. **Scope is now frozen (CLAUDE.md §5)** until the current set runs unattended for a month — the next step is operational (deploy the scheduler + worker), not another feature block.
 
 ---
 

@@ -44,6 +44,31 @@ def test_channel_selection_priority() -> None:
     )
 
 
+def test_empty_webhook_url_is_unconfigured() -> None:
+    """An empty ALERT_WEBHOOK_URL (the blank value shipped in .env.example) must NOT select a
+    WebhookChannel pointed at an empty URL — it falls through like the truthy ntfy/smtp checks."""
+    assert isinstance(get_delivery_channel(Settings(alert_webhook_url=SecretStr(""))), LogChannel)
+    # An empty webhook with ntfy configured must honor ntfy, not the empty webhook.
+    assert isinstance(
+        get_delivery_channel(Settings(alert_webhook_url=SecretStr(""), ntfy_topic="atlas")),
+        NtfyChannel,
+    )
+
+
+def test_whitespace_only_values_are_unconfigured() -> None:
+    """Whitespace-only config (webhook/ntfy/smtp) must NOT select a channel — it falls through."""
+    assert isinstance(
+        get_delivery_channel(Settings(alert_webhook_url=SecretStr("   "))), LogChannel
+    )
+    assert isinstance(get_delivery_channel(Settings(ntfy_topic="  ")), LogChannel)
+    assert isinstance(
+        get_delivery_channel(Settings(smtp_host="  ", smtp_from="  ", smtp_to="  ")), LogChannel
+    )
+    # Surrounding whitespace on a real webhook URL is stripped, not rejected.
+    chan = get_delivery_channel(Settings(alert_webhook_url=SecretStr("  https://hook.test/x  ")))
+    assert isinstance(chan, WebhookChannel)
+
+
 def test_log_channel_send() -> None:
     assert LogChannel().send("subj", "body") == "logged"
 
