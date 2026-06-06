@@ -1,0 +1,15 @@
+# AtlasCore daily digest (oneshot, driven by atlascore-digest.timer). Emits the health + DLQ +
+# liveness summary over the configured alert channel (ALERT_WEBHOOK_URL / NTFY_TOPIC / SMTP).
+# This is the human-readable daily summary; whole-box/dead-scheduler liveness is paged by the
+# scheduler's HEARTBEAT_URL dead-man's-switch (see .env.example / infra/systemd/README.md).
+[Unit]
+Description=AtlasCore daily digest (health + DLQ + liveness over the alert channel)
+After=atlascore-stack.service
+Requires=atlascore-stack.service
+
+[Service]
+Type=oneshot
+User=atlascore
+WorkingDirectory=/opt/atlascore
+EnvironmentFile=/opt/atlascore/.env
+ExecStart=/opt/atlascore/.venv/bin/atlas digest

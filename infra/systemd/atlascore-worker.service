@@ -1,0 +1,20 @@
+# AtlasCore worker — EXACTLY ONE fetch worker in MVP (R16). `atlas worker run` drains the full
+# fetch->parse->enrich pipeline and holds the fetch advisory lock; a second fetch worker is refused
+# (FetchWorkerBusyError). For extra parse/enrich capacity, enable atlascore-worker-proc@N.service
+# (no fetch lock). Install: see infra/systemd/README.md.
+[Unit]
+Description=AtlasCore worker (single fetch worker; drains fetch->parse->enrich)
+After=atlascore-stack.service network-online.target
+Requires=atlascore-stack.service
+
+[Service]
+Type=simple
+User=atlascore
+WorkingDirectory=/opt/atlascore
+EnvironmentFile=/opt/atlascore/.env
+ExecStart=/opt/atlascore/.venv/bin/atlas worker run
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -755,11 +755,13 @@ CREATE INDEX source_health_status_idx ON source_health (status);
 
 ### 2.13 llm_spend (operational, B21)
 
-**Purpose.** The LLM cost ledger backing the hard monthly spend cap (§20). One row per paid hosted-LLM call. Not one of the 12 canonical data tables — a control-plane operational table (like the queue), so it sits outside the purge cascade.
+**Purpose.** The LLM cost ledger backing the hard monthly spend cap (§20). One row per paid hosted-LLM **or cloud-embedding** call. Not one of the 12 canonical data tables — a control-plane operational table (like the queue), so it sits outside the purge cascade.
 
-**Columns.** `id` uuid PK, `ts` timestamptz default now(), `provider` text, `model` text, `request_kind` text (`summary`), `input_tokens` int, `output_tokens` int, `est_cost_eur` numeric(12,6), `period_ym` text ('YYYY-MM'), `summary_id` uuid **(non-FK** — decoupled from the raw-SQL `summary` table, purge-simple), `created_at`, `schema_version`. **Index** `btree(period_ym)` for month-to-date sums.
+**Columns.** `id` uuid PK, `ts` timestamptz default now(), `provider` text, `model` text, `request_kind` text (`summary` | `embedding`), `input_tokens` int, `output_tokens` int, `est_cost_eur` numeric(12,6), `period_ym` text ('YYYY-MM'), `summary_id` uuid **(non-FK** — decoupled from the raw-SQL `summary` table, purge-simple; null for `embedding` rows), `created_at`, `schema_version`. **Index** `btree(period_ym)` for month-to-date sums.
 
 > **Implemented (B21) — migration `0012`** ([ADR 0032](../decisions/0032-b21-real-backends-spend-cap-spacy-reindex.md)). Normal autogenerate-managed table. `storage.llm_spend` exposes `estimate_cost_eur` (conservative per-provider price table), `month_to_date_spend(period_ym)`, and `record_spend(...)`. The summary pipeline sums month-to-date spend before any paid (`SummaryBackend.is_paid`) compute and **degrades to cache-only** at/over `LLM_MONTHLY_SPEND_CAP_EUR`; a successful paid compute records one ledger row in the summary's transaction.
+>
+> **Cloud embeddings share the same ledger + cap (`request_kind='embedding'`)** — `storage.embeddings.upsert_embeddings` checks month-to-date spend before a paid (`is_paid`) cloud embed and **skips** it at/over the cap (graceful degradation: existing vectors untouched, FTS still works), recording one ledger row on a successful embed (summaries + embeddings draw on one shared monthly budget). This closes the B21 gap where only summaries were metered ([ADR 0034](../decisions/0034-soak-readiness-hardening.md)).
 
 ---
 

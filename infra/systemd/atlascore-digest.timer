@@ -1,0 +1,10 @@
+# Daily AtlasCore digest. Persistent=true sends a catch-up digest after downtime.
+[Unit]
+Description=Send the AtlasCore daily digest
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

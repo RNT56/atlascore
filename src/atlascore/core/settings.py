@@ -37,7 +37,11 @@ class Settings(BaseSettings):
 
     # SQLAlchemy/psycopg DSN for the single Postgres 16 instance. The driver MUST
     # be ``postgresql+psycopg`` (psycopg v3). Carries a password, so never logged.
-    database_url: str = "postgresql+psycopg://atlas:atlas@localhost:5432/atlascore"
+    # Default matches the compose/CI role (``atlascore``); overridden by .env in any
+    # real deployment. Must agree with the compose POSTGRES_* values (see .env.example).
+    database_url: str = (
+        "postgresql+psycopg://atlascore:change-me-local-only@localhost:5432/atlascore"
+    )
 
     # Local-disk raw store: immutable, gzipped, content-addressed payloads.
     raw_store_dir: Path = Path("/var/atlascore/rawstore")
@@ -94,6 +98,14 @@ class Settings(BaseSettings):
     smtp_pass: SecretStr | None = None
     smtp_from: str | None = None
     smtp_to: str | None = None
+
+    # --- Liveness heartbeat / dead-man's-switch (optional; recommended for unattended ops) ---
+    # An external uptime-monitor ping URL (e.g. healthchecks.io). The single-instance scheduler GETs
+    # it after each SUCCESSFUL tick, so if the box / Postgres / scheduler dies the pings stop and the
+    # monitor PAGES — turning "silence = undetected outage" into an active alert. Carries a per-check
+    # token, so SecretStr (never logged). Blank ⇒ disabled.
+    heartbeat_url: SecretStr | None = None
+    heartbeat_timeout: float = 10.0
 
     # --- Retention windows (control-plane rotation; duration grammar Nd|Nw|Nm|Ny|Nh) ---
     # audit_log: only retention_class='routine' rows beyond this window are rotated; purge rows are

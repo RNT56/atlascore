@@ -20,6 +20,11 @@ _GOOGLE_BASE = "https://generativelanguage.googleapis.com"
 
 
 class _CloudBase:
+    # Cloud embedding calls cost money and egress text (§16/§20): flagged paid so the embedding
+    # persistence path meters them on the ``llm_spend`` ledger under LLM_MONTHLY_SPEND_CAP_EUR,
+    # exactly as the hosted summary backend is metered. Local backends omit this attribute.
+    is_paid = True
+
     def __init__(
         self, settings: Settings | None = None, *, client: httpx.Client | None = None
     ) -> None:
@@ -29,6 +34,11 @@ class _CloudBase:
             raise ConfigError(
                 f"embedding backend {self._settings.embedding_backend!r} requires EMBEDDING_API_KEY"
             )
+
+    @property
+    def provider(self) -> str:
+        """The price-table provider key for the §20 ledger (``openai`` | ``google``)."""
+        return self._settings.embedding_backend
 
     @property
     def model_name(self) -> str:

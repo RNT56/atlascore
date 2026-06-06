@@ -68,3 +68,18 @@ def test_missing_key_raises() -> None:
 def test_factory_returns_cloud_backends() -> None:
     assert isinstance(get_embedding_backend(_settings("openai")), OpenAIEmbeddingBackend)
     assert isinstance(get_embedding_backend(_settings("google")), GoogleEmbeddingBackend)
+
+
+def test_cloud_backends_are_paid_with_provider() -> None:
+    # `is_paid`/`provider` drive the §20 spend metering in storage.embeddings.upsert_embeddings.
+    o = OpenAIEmbeddingBackend(_settings("openai"))
+    assert o.is_paid is True and o.provider == "openai"
+    g = GoogleEmbeddingBackend(_settings("google"))
+    assert g.is_paid is True and g.provider == "google"
+
+
+def test_local_backend_is_not_paid() -> None:
+    # The local hashing backend must NOT be metered (free/offline) — getattr falls through to False.
+    from atlascore.enrichment.embeddings.hashing import HashingEmbeddingBackend
+
+    assert getattr(HashingEmbeddingBackend(dim=8), "is_paid", False) is False

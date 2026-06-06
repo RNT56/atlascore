@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from atlascore.alerts.delivery import DeliveryChannel
 from atlascore.core.clock import Clock, SystemClock
+from atlascore.core.heartbeat import ping_heartbeat
 from atlascore.core.logging import get_logger
 from atlascore.core.settings import Settings, get_settings
 from atlascore.scheduler.cron import is_due, tick_bucket
@@ -166,6 +167,9 @@ def run_scheduler(
                 ran = run_housekeeping(engine, cadence, now=now, settings=settings, channel=channel)
                 if fetches or ran:
                     _log.info("scheduler_tick", fetches=fetches, housekeeping=ran)
+                # Liveness beat AFTER a successful tick (best-effort; "disabled" when unconfigured):
+                # a failing tick skips the ping, so a sustained outage stops the heartbeat and pages.
+                ping_heartbeat(settings)
             except Exception as exc:  # one bad tick must not kill the daemon (§18)
                 _log.warning("scheduler_tick_failed", error=str(exc))
             ticks += 1

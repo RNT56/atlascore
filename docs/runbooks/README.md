@@ -166,8 +166,15 @@ make smoke
 
 ### 2.3 systemd units
 
-Install the following units under `/etc/systemd/system/`. Exact module paths behind the
-`atlas` console script are finalized in MVP block B1; the unit shape below is stable.
+> **Vetted, ready-to-install copies of every unit + timer below ship in
+> [`infra/systemd/`](../../infra/systemd/) — `sudo cp infra/systemd/atlascore-*.service
+> infra/systemd/atlascore-*.timer /etc/systemd/system/` and follow `infra/systemd/README.md`.**
+> They use the real console-script entrypoints (`atlas scheduler run` / `atlas worker run`); the
+> inline blocks here are the annotated reference.
+
+Install the following units under `/etc/systemd/system/`. They invoke the `atlas` console script
+(`atlas scheduler run`, `atlas worker run`); the single-scheduler and single-fetch invariants
+(§17, R16) are enforced by advisory locks plus keeping one unit of each.
 
 `atlascore-stack.service` (the compose stack):
 
@@ -202,7 +209,7 @@ Requires=atlascore-stack.service
 Type=simple
 WorkingDirectory=/opt/atlascore
 EnvironmentFile=/opt/atlascore/.env
-ExecStart=/opt/atlascore/.venv/bin/python -m apps.scheduler
+ExecStart=/opt/atlascore/.venv/bin/atlas scheduler run
 Restart=on-failure
 RestartSec=5
 User=atlascore
@@ -213,10 +220,11 @@ User=atlascore
 WantedBy=multi-user.target
 ```
 
-`atlascore-worker-fetch.service` — **EXACTLY ONE fetch worker** in MVP (R5). The fetch role
-asserts `FETCH_WORKERS=1` and acquires a pg advisory lock at startup; a second fetch worker
-refuses to start until the documented `host_rate_state` token-bucket scale-up path is enabled
-(runbook 3).
+`atlascore-worker-fetch.service` — **EXACTLY ONE fetch worker** in MVP (R5). `atlas worker run`
+acquires a fetch-role pg advisory lock at startup (R16); a second fetch worker refuses to start
+(`FetchWorkerBusyError`) until the documented `host_rate_state` token-bucket scale-up path is
+enabled (runbook 3). (`atlas worker run` drains all of fetch+parse+enrich; the optional
+`atlascore-worker-proc@.service` below adds parse/enrich-only capacity and takes no fetch lock.)
 
 ```ini
 [Unit]
@@ -228,9 +236,7 @@ Requires=atlascore-stack.service
 Type=simple
 WorkingDirectory=/opt/atlascore
 EnvironmentFile=/opt/atlascore/.env
-Environment=WORKER_ROLE=fetch
-Environment=FETCH_WORKERS=1
-ExecStart=/opt/atlascore/.venv/bin/python -m apps.worker --role fetch
+ExecStart=/opt/atlascore/.venv/bin/atlas worker run
 Restart=on-failure
 RestartSec=5
 User=atlascore
@@ -252,8 +258,7 @@ Requires=atlascore-stack.service
 Type=simple
 WorkingDirectory=/opt/atlascore
 EnvironmentFile=/opt/atlascore/.env
-Environment=WORKER_ROLE=process
-ExecStart=/opt/atlascore/.venv/bin/python -m apps.worker --role process
+ExecStart=/opt/atlascore/.venv/bin/atlas worker run --role parse --role enrich
 Restart=on-failure
 RestartSec=5
 User=atlascore
@@ -310,7 +315,7 @@ Verify there is exactly one:
 systemctl --no-pager status atlascore-scheduler.service
 
 # process count on the host (expect exactly 1)
-pgrep -af 'apps.scheduler' | wc -l
+pgrep -af 'atlas scheduler run' | wc -l
 
 # advisory lock holder (the scheduler holds a known lock key; see core/locks)
 psql "$DATABASE_URL" -c \
@@ -332,13 +337,13 @@ In MVP, fetch concurrency per host = 1, enforced by a single in-process per-host
 inside one fetch worker. This is what makes the SEC EDGAR 10 req/s limit (and every other
 `rate_limit`) true across the system.
 
-A startup guard mirrors the scheduler guard: the fetch role asserts `FETCH_WORKERS=1` and
-acquires a fetch-role pg advisory lock; a second fetch worker is refused until the
+A startup guard mirrors the scheduler guard: `atlas worker run` (fetch role)
+acquires a fetch-role pg advisory lock (R16); a second fetch worker is refused until the
 `host_rate_state` Postgres-backed token-bucket scale-up path is enabled.
 
 ```bash
 # Expect exactly 1 fetch worker:
-pgrep -af 'apps.worker --role fetch' | wc -l
+pgrep -af 'atlas worker run' | wc -l
 
 # If a second fetch worker was started by mistake, it should have exited on the lock.
 # Confirm and remove any stray:
@@ -348,7 +353,7 @@ sudo systemctl status atlascore-worker-fetch.service
 > **Scale-up path (documented; do not enable casually):** to run more than one fetch worker,
 > replace the in-process bucket with a Postgres-backed per-host token bucket (table
 > `host_rate_state`) or `pg_advisory_xact_lock(hashtext(host))` + decrement-on-claim, then
-> remove the `FETCH_WORKERS=1` assertion. Always respect `Retry-After`. Treat this as an
+> relax the single-fetch advisory-lock guard (R16). Always respect `Retry-After`. Treat this as an
 > architecture change: write an ADR and update `docs/architecture/README.md` and this runbook.
 
 ### 3.3 Scaling processing workers
@@ -446,7 +451,9 @@ Requires=atlascore-stack.service
 Type=oneshot
 WorkingDirectory=/opt/atlascore
 EnvironmentFile=/opt/atlascore/.env
-ExecStart=/opt/atlascore/.venv/bin/atlas backup
+# Invoke infra/backup.sh (NOT `atlas backup`): the script does the OFFSITE rclone/rsync +
+# local retention. `atlas backup` is a local-only snapshot and would skip the offsite copy.
+ExecStart=/opt/atlascore/infra/backup.sh
 User=atlascore
 ```
 
@@ -473,8 +480,8 @@ psql "$DATABASE_URL" -c \
 rclone lsl offsite:atlascore/db/ | tail -n 5
 ```
 
-If no backup in > 24h, treat it as an RPO breach: run `atlas backup` manually and investigate
-the timer/credentials.
+If no backup in > 24h, treat it as an RPO breach: run `infra/backup.sh` manually (offsite) and
+investigate the timer/credentials.
 
 ---
 
@@ -530,8 +537,12 @@ psql "${DATABASE_URL/+psycopg/}" -c \
    UNION ALL SELECT 'source', count(*) FROM source
    UNION ALL SELECT 'time_series_point', count(*) FROM time_series_point;"
 
-# c. Raw-store linkage: every recent document's raw file resolves on disk.
-atlas restore verify           # cross-checks raw_document.path against $RAW_STORE_DIR
+# c. Raw-store linkage: there is no `atlas restore verify` CLI. infra/restore_drill.sh restores a
+#    dump into a scratch DB and runs sanity counts (incl. an optional raw-blob count); to spot-check
+#    by hand, confirm a recent document's raw file resolves on disk:
+psql "${DATABASE_URL/+psycopg/}" -c \
+  "SELECT d.id, r.path FROM document d JOIN raw_document r ON r.id = d.raw_document_id
+   ORDER BY d.ingested_at DESC LIMIT 3;"
 
 # d. Search works (FTS path independent of enrichment).
 atlas search "test" --limit 5
@@ -542,9 +553,11 @@ psql "${DATABASE_URL/+psycopg/}" -c \
    GROUP BY 1,2 ORDER BY 3 DESC LIMIT 5;"
 ```
 
-`atlas restore verify` samples recent `document` rows, follows each `raw_document_id` to its
-`raw_document.path`, and confirms the gzip file exists and its `content_hash` matches. A
-mismatch means the raw mirror is stale or incomplete — investigate the offsite raw sync.
+`infra/restore_drill.sh` restores the dump into a throwaway scratch DB and runs sanity counts
+(including the purge-class audit-retention check and an optional raw-blob count); the manual query
+above follows a `document`'s `raw_document_id` to its `raw_document.path` to confirm the gzip file
+exists on disk. A missing file means the raw mirror is stale or incomplete — investigate the
+offsite raw sync.
 
 ### 5.3 Recording the drill
 
@@ -761,6 +774,8 @@ Restart=on-failure
 > **Single-scheduler + single-fetch invariants (§17):** never enable a second scheduler unit or a
 > second fetch worker. The advisory locks refuse the second process, but keep the deployment to one
 > of each regardless. Cadences are tuned via the `*_INTERVAL_SECONDS` env knobs (`.env.example`).
+> Ready-to-install copies of these units (plus the backup/digest timers) ship in
+> [`infra/systemd/`](../../infra/systemd/); set `HEARTBEAT_URL` for the scheduler dead-man's-switch.
 
 ---
 
@@ -773,7 +788,7 @@ exceeding `max_attempts` move to `status='dead'` (the DLQ).
 
 ```bash
 # CLI summary of dead jobs (control-plane surface).
-atlas jobs dlq list
+atlas crawl dlq
 
 # Group dead jobs by source and type to spot a systemic failure.
 psql "${DATABASE_URL/+psycopg/}" -c \
@@ -782,7 +797,9 @@ psql "${DATABASE_URL/+psycopg/}" -c \
    GROUP BY source_id, job_type ORDER BY dead DESC;"
 
 # Inspect a single dead job's last_error (already secret-sanitized at write time, runbook 14).
-atlas jobs show <job_id>
+# (No `atlas jobs show` CLI in MVP — query the queue directly:)
+psql "${DATABASE_URL/+psycopg/}" -c \
+  "SELECT id, source_id, job_type, attempt, last_error FROM crawl_job WHERE id='<job_id>';"
 ```
 
 ### 7.2 Diagnose before requeue
@@ -804,18 +821,11 @@ re-claim it. Because jobs are idempotent (deterministic `dedupe_key`, content-ha
 `UNIQUE NULLS NOT DISTINCT` on time series, `unique(content_hash)` on raw), replaying never
 duplicates data.
 
-```bash
-# Requeue one job.
-atlas jobs requeue <job_id>
+> **MVP has no `atlas jobs requeue` CLI.** Requeue is the break-glass SQL below (the queue is the
+> single `crawl_job` table); a future `atlas crawl requeue` is a candidate depth follow-up. Inspect
+> the DLQ first with `atlas crawl dlq`.
 
-# Requeue all dead fetch jobs for a source after a transient outage is resolved.
-atlas jobs requeue --source <source_id> --type fetch --status dead
-
-# After a parser fix, requeue dead parse jobs (re-parse against the immutable raw).
-atlas jobs requeue --type parse --status dead
-```
-
-If you must edit the queue by hand (break-glass):
+Break-glass requeue (reset dead → pending; idempotent, so replays never duplicate):
 
 ```sql
 UPDATE crawl_job
@@ -867,8 +877,8 @@ psql "${DATABASE_URL/+psycopg/}" -c \
           success_rate_24h, last_success_at, last_item_published_at
    FROM source_health WHERE status <> 'ok' ORDER BY status, freshness_lag DESC;"
 
-# Inspect recent dead/failed jobs for that source (runbook 7).
-atlas jobs dlq list --source <source_id>
+# Inspect recent dead jobs (runbook 7; `atlas crawl dlq` lists all — filter by source via psql).
+atlas crawl dlq
 
 # Test the source directly (rate-limited, opt-in live).
 atlas source test <source_id>
@@ -1184,8 +1194,8 @@ workers claim via `SELECT ... FOR UPDATE SKIP LOCKED`; a claimed-but-stale job (
 ### 13.1 Detect stuck jobs
 
 ```bash
-atlas jobs stuck                  # CLI list of claimed/running jobs past the visibility timeout
-
+# No `atlas jobs stuck` CLI in MVP — the running worker loop auto-reclaims stale jobs; list them
+# directly for inspection:
 psql "${DATABASE_URL/+psycopg/}" -c \
   "SELECT id, source_id, job_type, status, claimed_by, claimed_at, attempt
    FROM crawl_job
@@ -1198,13 +1208,9 @@ psql "${DATABASE_URL/+psycopg/}" -c \
 
 ### 13.2 Reclaim
 
-Normally the worker/scheduler reclaim loop does this for you. To force it:
-
-```bash
-atlas jobs reclaim                # resets stale claimed/running jobs to pending
-```
-
-Break-glass SQL (only if the CLI is unavailable):
+The running worker loop reclaims stale `claimed`/`running` jobs automatically every
+`visibility_timeout/2` (crash safety) — normally you do nothing. There is no `atlas jobs reclaim`
+CLI in MVP; if the worker is down, force it with the break-glass SQL:
 
 ```sql
 UPDATE crawl_job
@@ -1275,16 +1281,16 @@ If either returns rows, treat it as a secrets incident: rotate the exposed crede
 | --- | --- | --- |
 | 2 Deploy | New VM / DR rebuild | `make migrate`, `systemctl enable --now …` |
 | 3 Multi-worker | Verify one scheduler / one fetch worker | `pgrep`, `systemctl status`, advisory-lock check |
-| 4 Backup | Nightly (auto) or manual | `atlas backup` |
-| 5 Restore drill | Periodically; real DR | `pg_restore`, `atlas restore verify` |
+| 4 Backup | Nightly (auto) or manual | `infra/backup.sh` (offsite); `atlas backup` (local snapshot) |
+| 5 Restore drill | Periodically; real DR | `pg_restore`, `infra/restore_drill.sh` |
 | 6 Purge / erasure | Erase a doc or entity | `atlas purge <id>` |
-| 7 DLQ | Failed jobs piling up | `atlas jobs dlq list`, `atlas jobs requeue` |
+| 7 DLQ | Failed jobs piling up | `atlas crawl dlq`, break-glass SQL (no requeue CLI) |
 | 8 Stale source | A feed went silent | `atlas health`, `atlas source test` |
 | 9 Onboard source | Add a new source | `atlas source validate/test`, `atlas crawl once` |
 | 10 Rotate secrets | Credential change | edit `.env` (one place), restart services |
-| 11 Embedding switch | Change model/dim/backend | `atlas enrich backfill --stage embeddings` |
+| 11 Embedding switch | Change model/dim/backend | `atlas reindex-embeddings` |
 | 12 Digest / health | Daily summary; triage | `atlas health`, `atlas digest` |
-| 13 Stuck jobs | Worker crash recovery | `atlas jobs stuck`, `atlas jobs reclaim` |
+| 13 Stuck jobs | Worker crash recovery | auto-reclaim in `atlas worker run`; break-glass SQL |
 | 14 Secrets hygiene | Audit free-form fields | psql spot-checks; `sanitize_for_storage` |
 
 ---

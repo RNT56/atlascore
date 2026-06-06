@@ -1,0 +1,21 @@
+# AtlasCore scheduler — EXACTLY ONE instance (§17). Enqueues due per-source fetches each tick and
+# runs freshness/alert/partition/audit housekeeping inline. Pings HEARTBEAT_URL after each
+# successful tick (dead-man's-switch). Install: see infra/systemd/README.md.
+[Unit]
+Description=AtlasCore scheduler (single instance; timed fetches + inline housekeeping)
+After=atlascore-stack.service network-online.target
+Requires=atlascore-stack.service
+
+[Service]
+Type=simple
+User=atlascore
+WorkingDirectory=/opt/atlascore
+EnvironmentFile=/opt/atlascore/.env
+ExecStart=/opt/atlascore/.venv/bin/atlas scheduler run
+Restart=on-failure
+RestartSec=5
+# EXACTLY ONE scheduler: never template or duplicate this unit. A second instance is also refused
+# by the scheduler advisory lock (SchedulerBusyError), but keep the deployment to one regardless.
+
+[Install]
+WantedBy=multi-user.target

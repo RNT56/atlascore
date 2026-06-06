@@ -62,7 +62,11 @@ services:
     restart: unless-stopped
     profiles: ["search"]   # OPTIONAL — not started unless the "search" profile is selected.
     environment:
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?MEILI_MASTER_KEY must be set when using the search profile}
+      # NOTE: Compose interpolates EVERY service (even profiled-off ones) before applying profile
+      # filters, so a hard `:?` here would break the default `docker compose up -d` / `make dev` for
+      # anyone not using search. Default to empty; when you DO enable `--profile search`, set a real
+      # MEILI_MASTER_KEY (≥16 bytes) — Meilisearch itself refuses to start in production mode without it.
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
       MEILI_ENV: ${MEILI_ENV:-production}
       MEILI_NO_ANALYTICS: "true"
     ports:
