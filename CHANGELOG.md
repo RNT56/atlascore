@@ -30,6 +30,22 @@ components, not new sources/services).
 
 ### Added
 
+- **Soak-readiness hardening (pre-deploy)** ([ADR 0034](docs/decisions/0034-soak-readiness-hardening.md)).
+  - **Dead-man's-switch:** optional `HEARTBEAT_URL` (+ `HEARTBEAT_TIMEOUT`); `core.heartbeat.ping_heartbeat`
+    GETs it best-effort (never raises; logs only the exception type so the per-check token never leaks).
+    `atlas scheduler run` pings it after each successful tick — a sustained outage stops the heartbeat so
+    an external monitor (e.g. healthchecks.io) pages, instead of the operator having to notice silence.
+  - **Cloud-embedding spend cap:** cloud embedding backends now expose `is_paid`/`provider`, and
+    `storage.embeddings.upsert_embeddings` meters them on the **same `llm_spend` ledger + `LLM_MONTHLY_SPEND_CAP_EUR`**
+    as summaries (`request_kind='embedding'`): at/over the cap a paid embed is **skipped** (existing
+    vectors untouched — FTS still works) and a successful paid embed records one ledger row. Closes the
+    B21 gap where only summaries were metered. Local/sentence-transformers backends are never charged.
+    No schema change. New regressions: `tests/integration/test_embedding_spend_cap.py` + cloud-backend
+    `is_paid` unit tests + `tests/unit/test_heartbeat.py`.
+  - **Deploy glue:** vetted systemd unit/timer files under `infra/systemd/` (stack, scheduler, single
+    worker, optional parse/enrich `worker-proc@`, backup→`infra/backup.sh`, digest) with full
+    `[Install]`/`User`/`WorkingDirectory`/`Restart` + an install README.
+
 - **B22 — SEC full-filing extraction via sandboxed Tika** ([ADR 0033](docs/decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).
   - `atlascore.security.sandbox.tika` (`TikaClient` + `tika_available`): out-of-process,
     resource-bounded (`RLIMIT_AS`/`RLIMIT_CPU` + timeout, fixed argv, no shell, no network, non-root)
@@ -286,6 +302,23 @@ components, not new sources/services).
   deprecation that `filterwarnings=error` would otherwise turn into a test error).
 
 ### Fixed
+
+- **Deploy-glue + runbook accuracy (pre-soak, [ADR 0034](docs/decisions/0034-soak-readiness-hardening.md)).**
+  - `.env.example` now ships a `POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB` block and a `DATABASE_URL`
+    that **agrees with the compose/CI Postgres role** (`atlascore`, not `atlas`) — previously a
+    `cp .env.example .env && make dev && make migrate` failed on auth. `core.settings` default and the
+    integration `conftest._DEFAULT_URL` are aligned to the same role; `.secrets.baseline` regenerated.
+  - `infra/docker-compose.yml`: the optional Meilisearch service used a hard `${MEILI_MASTER_KEY:?…}`,
+    which Compose evaluates during interpolation **before** profile filtering — so a plain
+    `docker compose up -d` / `make dev` errored out for anyone not using the (off-by-default) `search`
+    profile. Changed to `${MEILI_MASTER_KEY:-}`; the key requirement now applies only when the profile
+    is actually enabled (Meilisearch enforces it at its own startup).
+  - Runbook: the §2.3 systemd units now use `atlas scheduler run` / `atlas worker run` (the crash-looping
+    `python -m apps.scheduler` / `apps.worker --role process` blocks are gone) and point at the shipped
+    `infra/systemd/` files; the backup timer invokes `infra/backup.sh` (offsite) not `atlas backup`
+    (local-only); and the non-existent `atlas jobs requeue/stuck/reclaim`, `atlas restore verify`, and
+    `atlas enrich backfill` references are replaced with the real commands (`atlas crawl dlq`,
+    `infra/restore_drill.sh`, `atlas reindex-embeddings`) + break-glass SQL.
 
 - **Alert/digest delivery selected a broken webhook on a blank `ALERT_WEBHOOK_URL`** (found during a
   full end-to-end run). `get_delivery_channel` gated the webhook with `is not None`, but the empty

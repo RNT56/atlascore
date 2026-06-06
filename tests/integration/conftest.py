@@ -17,7 +17,8 @@ from alembic.config import Config
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import OperationalError
 
-_DEFAULT_URL = "postgresql+psycopg://atlas:atlas@localhost:5432/atlascore"
+# Matches the compose/.env.example local default (user `atlascore`); CI overrides via DATABASE_URL.
+_DEFAULT_URL = "postgresql+psycopg://atlascore:change-me-local-only@localhost:5432/atlascore"
 
 
 @pytest.fixture(scope="session")

@@ -1,0 +1,20 @@
+# OPTIONAL parse/enrich-only worker (templated; safe to scale out). Does NO network fetching, so it
+# takes no fetch lock and carries no per-host rate-limit risk. Enable as many as you need:
+#   sudo systemctl enable --now atlascore-worker-proc@1.service atlascore-worker-proc@2.service
+# Do NOT add `fetch` to these — the single-fetch invariant (R16) must hold.
+[Unit]
+Description=AtlasCore processing worker %i (parse/enrich only; safe to scale out)
+After=atlascore-stack.service network-online.target
+Requires=atlascore-stack.service
+
+[Service]
+Type=simple
+User=atlascore
+WorkingDirectory=/opt/atlascore
+EnvironmentFile=/opt/atlascore/.env
+ExecStart=/opt/atlascore/.venv/bin/atlas worker run --role parse --role enrich
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

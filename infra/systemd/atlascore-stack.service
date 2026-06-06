@@ -1,0 +1,19 @@
+# AtlasCore infra stack (PostgreSQL 16 + pgvector) via Docker Compose.
+# Install: see infra/systemd/README.md. Requires the atlascore user to be in the `docker` group.
+[Unit]
+Description=AtlasCore infra stack (PostgreSQL 16 + pgvector) via Docker Compose
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=atlascore
+WorkingDirectory=/opt/atlascore
+EnvironmentFile=/opt/atlascore/.env
+ExecStart=/usr/bin/docker compose -f infra/docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f infra/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+# AtlasCore backup (oneshot, driven by atlascore-backup.timer). Runs infra/backup.sh, NOT
+# `atlas backup`: the script does the OFFSITE rclone/rsync of the dump + raw store plus local
+# retention. `atlas backup` is a local-only snapshot and would skip the offsite copy.
+# Set BACKUP_OFFSITE_REMOTE (rclone remote) or BACKUP_OFFSITE_RSYNC in .env, or an unattended month
+# runs with NO offsite copy. Needs pg_dump on PATH.
+[Unit]
+Description=AtlasCore backup (pg_dump + offsite raw sync via infra/backup.sh)
+After=atlascore-stack.service
+Requires=atlascore-stack.service
+
+[Service]
+Type=oneshot
+User=atlascore
+WorkingDirectory=/opt/atlascore
+EnvironmentFile=/opt/atlascore/.env
+ExecStart=/opt/atlascore/infra/backup.sh

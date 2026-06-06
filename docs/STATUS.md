@@ -362,7 +362,41 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-- _(nothing in progress — the B16–B22 post-MVP cycle is complete; see below.)_
+- _(nothing in progress — soak-readiness hardening shipped; see the Done section below.)_
+
+## Done — Soak-readiness hardening (pre-soak, 2026-06-06)
+
+**Deploy glue + safety nets that make the §5 unattended-month soak safe — depth on existing
+components, NOT a new source/service ([ADR 0034](decisions/0034-soak-readiness-hardening.md)).**
+
+- **DB credential reconciliation.** `.env.example` now ships an explicit
+  `POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB` block + a `DATABASE_URL` that agrees with the
+  compose/CI role (`atlascore`, not `atlas`) — `cp .env.example .env && make dev && make migrate`
+  works out of the box. `core.settings` default + integration `conftest._DEFAULT_URL` aligned;
+  `.secrets.baseline` regenerated (pinned detect-secrets 1.5.0).
+- **Dead-man's-switch.** Optional `HEARTBEAT_URL` (+ `HEARTBEAT_TIMEOUT`); `core.heartbeat.ping_heartbeat`
+  (best-effort, never raises, never logs the token). `atlas scheduler run` pings it after each
+  successful tick, so a sustained outage stops the heartbeat and an external monitor pages — closing
+  the "silence = undetected outage" gap. `tests/unit/test_heartbeat.py`.
+- **Cloud-embedding spend cap.** `storage.embeddings.upsert_embeddings` now meters paid cloud embeds
+  on the **same `llm_spend` ledger + `LLM_MONTHLY_SPEND_CAP_EUR`** as summaries (`request_kind='embedding'`):
+  at/over the cap a paid embed is skipped (existing vectors untouched, FTS still works); a successful
+  paid embed records one ledger row. Closes the B21 gap where only summaries were metered. No schema
+  change. `tests/integration/test_embedding_spend_cap.py` + cloud `is_paid` unit tests.
+- **Vetted `infra/systemd/` units + runbook accuracy.** Shipped stack/scheduler/worker/`worker-proc@`/
+  backup/digest unit+timer files (+ README). Runbook §2.3/§6C use `atlas scheduler run`/`atlas worker
+  run` (no more crash-looping `apps.*`); backup timer → `infra/backup.sh` (offsite); stale
+  `atlas jobs *`/`atlas restore verify`/`atlas enrich backfill` references replaced with the real
+  commands (`atlas crawl dlq`, `infra/restore_drill.sh`, `atlas reindex-embeddings`) + break-glass SQL.
+- **Compose `make dev` fix (found by actually booting the stack).** `infra/docker-compose.yml` used a
+  hard `${MEILI_MASTER_KEY:?…}` on the off-by-default Meilisearch service; Compose interpolates it
+  **before** profile filtering, so `docker compose up -d` / `make dev` errored for anyone not using
+  search. Now `${MEILI_MASTER_KEY:-}` (required only when the `search` profile is enabled).
+- **Gates (verified on live PG16, not just unit):** ruff + ruff-format + mypy (148 src files) clean;
+  migrations apply through `0012` and `alembic check` is **drift-free**; **full suite 406 passed, 1
+  skipped (spacy)** on a real Postgres 16 + pgvector container — incl. the 2 new
+  `test_embedding_spend_cap.py` integration tests (under-cap records a ledger row, over-cap skips the
+  embed) and the compose stack booting cleanly. 7 new tests this change.
 
 ## Done — Post-MVP upgrade cycle (B16–B22)
 
@@ -389,11 +423,29 @@ deterministic offline default as the CI path and are contract-tested with respx 
 
 **§5 freeze is now in force.** Per CLAUDE.md §5, **do not add a new source or service** until the
 current set has run **unattended for a month**. The right next step is operational: deploy the B19
-scheduler + worker (one of each, runbook §6C), enable a real embedding/LLM/Tika backend if desired,
-and let it run. Candidate *depth* follow-ups (NOT new sources/services), only if a concrete need
-appears: an embedding-spend ledger (cloud embeddings aren't under the LLM cap yet), an `atlas
-summarize` pre-warm CLI, per-filing second-fetch wiring of B22 extraction into the worker loop, and a
-`source_health` history table. None are started.
+scheduler + worker (one of each) using the vetted `infra/systemd/` units, enable a real
+embedding/LLM/Tika backend if desired, and let it run.
+
+**Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
+1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a
+   real `DEFAULT_USER_AGENT` (SEC EDGAR requires a contact).
+2. **Configure + end-to-end TEST a real delivery channel** (ntfy is cheapest) — run `atlas digest` +
+   `atlas alerts run` and confirm the message reaches your device. Do NOT soak on the silent
+   `LogChannel` default.
+3. **Set `HEARTBEAT_URL`** to an external monitor (e.g. healthchecks.io) with a ~5–10 min grace, so a
+   dead box/scheduler pages instead of going silent.
+4. **Prove backups restore on the real host:** `pg_dump` on PATH, `BACKUP_OFFSITE_REMOTE`/`_RSYNC` set,
+   then run `infra/restore_drill.sh` once against the deploy's dumps.
+5. Keep offline/free defaults for the soak (`EMBEDDING_BACKEND=local`, `LLM_BACKEND=none`,
+   `TIKA_MODE=none`); if a cloud embedding backend is enabled it is now under the monthly cap (still
+   set a provider-side billing cap as belt-and-suspenders).
+
+The **embedding-spend ledger**, the **dead-man's-switch**, and the **deploy-glue/runbook** follow-ups
+are now DONE (see the Done section above; [ADR 0034](decisions/0034-soak-readiness-hardening.md)).
+Remaining candidate *depth* follow-ups (NOT new sources/services), only if a concrete need appears:
+an `atlas crawl requeue` CLI (replace the break-glass requeue SQL), an `atlas summarize` pre-warm CLI,
+per-filing second-fetch wiring of B22 extraction into the worker loop, a periodic restore-drill timer,
+and a `source_health` history table. None are started.
 
 ---
 
@@ -445,7 +497,10 @@ summarize` pre-warm CLI, per-filing second-fetch wiring of B22 extraction into t
   `LLM_BACKEND=api` (`HostedSummaryBackend`, OpenAI/Anthropic/Google over httpx) and
   `EMBEDDING_BACKEND=sentence-transformers|openai|google` are now wired (import-guarded; respx-tested),
   with the **hard `LLM_MONTHLY_SPEND_CAP_EUR`** enforced via the `llm_spend` ledger
-  (degrade-to-cache-only over cap) and cloud no-train/zero-retention controls. `NER_BACKEND=spacy`
+  (degrade-to-cache-only over cap) and cloud no-train/zero-retention controls. **Cloud *embeddings*
+  are now ALSO under the same ledger + cap (`request_kind='embedding'`; skip-over-cap) — closed
+  2026-06-06, [ADR 0034](decisions/0034-soak-readiness-hardening.md); previously only summaries were
+  metered.** `NER_BACKEND=spacy`
   (`SpacyNer`) is wired with a rule-based fallback. `atlas reindex-embeddings` handles a model/dim
   switch (R8). The deterministic `local`/extractive/rule-based path remains the offline CI default;
   default `LLM_BACKEND=none` ⇒ `get_document_summary` stays cache-only.

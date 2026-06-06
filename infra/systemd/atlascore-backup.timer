@@ -1,0 +1,10 @@
+# Nightly AtlasCore backup. Persistent=true catches up a missed run after downtime (RPO 24h).
+[Unit]
+Description=Run AtlasCore backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
