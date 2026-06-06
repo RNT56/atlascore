@@ -23,7 +23,10 @@
 # Use uv for everything; fall back to a bare invocation if a target predates B1.
 UV ?= uv
 RUN := $(UV) run
-COMPOSE ?= docker compose -f infra/docker-compose.yml
+# `-f infra/...` makes Compose anchor its project dir at infra/, so it would look for infra/.env and
+# IGNORE the root .env that `cp .env.example .env` / `make setup` create. `--env-file .env` +
+# `--project-directory .` keep interpolation reading the repo-root .env (POSTGRES_* etc.).
+COMPOSE ?= docker compose --project-directory . --env-file .env -f infra/docker-compose.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help setup dev down migrate seed format lint typecheck test \

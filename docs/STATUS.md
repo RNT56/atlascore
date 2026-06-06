@@ -388,10 +388,12 @@ components, NOT a new source/service ([ADR 0034](decisions/0034-soak-readiness-h
   run` (no more crash-looping `apps.*`); backup timer → `infra/backup.sh` (offsite); stale
   `atlas jobs *`/`atlas restore verify`/`atlas enrich backfill` references replaced with the real
   commands (`atlas crawl dlq`, `infra/restore_drill.sh`, `atlas reindex-embeddings`) + break-glass SQL.
-- **Compose `make dev` fix (found by actually booting the stack).** `infra/docker-compose.yml` used a
-  hard `${MEILI_MASTER_KEY:?…}` on the off-by-default Meilisearch service; Compose interpolates it
-  **before** profile filtering, so `docker compose up -d` / `make dev` errored for anyone not using
-  search. Now `${MEILI_MASTER_KEY:-}` (required only when the `search` profile is enabled).
+- **Compose `make dev` fixes (found by actually booting the stack + running the full day-1 path).**
+  (a) `infra/docker-compose.yml` used a hard `${MEILI_MASTER_KEY:?…}` on the off-by-default Meilisearch
+  service; Compose interpolates it **before** profile filtering, so `make dev` errored for anyone not
+  using search → now `${MEILI_MASTER_KEY:-}`. (b) `Makefile` `COMPOSE` used `-f infra/...` with no
+  project dir, anchoring it at `infra/` so it read `infra/.env` and **ignored the root `.env`** from
+  `cp .env.example .env` → now `--project-directory . --env-file .env` (PR follow-up to ADR 0034).
 - **Gates (verified on live PG16, not just unit):** ruff + ruff-format + mypy (148 src files) clean;
   migrations apply through `0012` and `alembic check` is **drift-free**; **full suite 406 passed, 1
   skipped (spacy)** on a real Postgres 16 + pgvector container — incl. the 2 new

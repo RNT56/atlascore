@@ -313,6 +313,11 @@ components, not new sources/services).
     `docker compose up -d` / `make dev` errored out for anyone not using the (off-by-default) `search`
     profile. Changed to `${MEILI_MASTER_KEY:-}`; the key requirement now applies only when the profile
     is actually enabled (Meilisearch enforces it at its own startup).
+  - `Makefile`: the `COMPOSE` command used `-f infra/docker-compose.yml` without a project directory,
+    so Compose anchored the project dir at `infra/` and read `infra/.env` — **ignoring the root `.env`**
+    that `cp .env.example .env` / `make setup` create, breaking `make dev` with "POSTGRES_PASSWORD
+    missing." Now `--project-directory . --env-file .env`, so `make dev`/`make down` read the repo-root
+    `.env`. (Found by running the full local day-1 path end-to-end.)
   - Runbook: the §2.3 systemd units now use `atlas scheduler run` / `atlas worker run` (the crash-looping
     `python -m apps.scheduler` / `apps.worker --role process` blocks are gone) and point at the shipped
     `infra/systemd/` files; the backup timer invokes `infra/backup.sh` (offsite) not `atlas backup`
