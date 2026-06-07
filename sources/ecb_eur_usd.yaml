@@ -1,0 +1,31 @@
+# AtlasCore source registry — ECB EUR/USD daily reference rate (API, v1).
+#
+# Policy note (operator): the ECB Data Portal is a free, official, KEYLESS data service of the
+# European Central Bank, documented for programmatic use, so it is marked `approved` for internal
+# research. No API key is required, so `credentials.ref` is null and nothing secret ever rides in
+# the request URL. No secrets and no private endpoints live here.
+
+id: ecb_eur_usd
+name: ECB — EUR/USD daily reference exchange rate
+category: macro_economics
+access_method: api
+# For an API source, base_url is the API root; the connector appends /service/data/{flow}/{key}.
+base_url: https://data-api.ecb.europa.eu
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+rate_limit: { max_requests: 5, window_seconds: 1 }
+# FX is published on TARGET business days, so allow a few days' slack across weekends/holidays.
+freshness: { target: "3d", warn_after: "5d", error_after: "7d" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }            # ECB needs no key
+fetch:
+  connector: atlascore.connectors.ecb.series:EcbConnector
+  schedule: "30 16 * * *"             # daily, just after the ~16:00 CET reference-rate publication
+  timeout_seconds: 30
+  params:
+    flow_ref: EXR
+    series_key: D.USD.EUR.SP00.A
+    series_id: EXR.D.USD.EUR.SP00.A   # stable id stored on each time_series_point row

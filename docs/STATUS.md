@@ -435,6 +435,14 @@ from a **separate pinned clone** (`~/atlascore-soak`) so ongoing V1 development 
 never touches the soak's DB/raw/code (see `infra/launchd/README.md` for the isolation model). V1 work
 proceeds in branches during the soak and is NOT deployed into the soak instance until the month is up.
 
+**V1 development (parallel track, lands on `main`, NOT in the pinned soak):**
+- ✅ **ECB macro connector** (`connectors/ecb`, `sources/ecb_eur_usd.yaml`) — keyless ECB Data Portal
+  CSV → `time_series_point` via the existing macro path; unit read inline from the CSV. Verified live
+  (~7,083 EUR/USD points). First v1 increment.
+- ⏳ Next v1 increments (requested: build all): **arXiv** connector (documents, keyless) → **GitHub**
+  connector (documents + token) → **read-only FastAPI dashboard** (new service + ADR). Each its own
+  branch → PR → CI → merge; none enabled in the soak clone until the month completes.
+
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a
    real `DEFAULT_USER_AGENT` (SEC EDGAR requires a contact).
