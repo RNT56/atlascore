@@ -30,6 +30,14 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — GitHub releases connector** (third v1 increment; parallel-track, not in the soak).
+  `GithubReleasesConnector` fetches `/repos/{owner}/{repo}/releases` (JSON) → `document` rows (release
+  id = GUID, `html_url` = link, name/tag = title, markdown `body` = body). An optional `GITHUB_TOKEN`
+  (`credentials.ref`) is sent as an `Authorization: Bearer` header for the ~5,000/hour tier (unauth
+  ~60/hour when unset; redacted by `sanitize_for_storage`). `sources/github_ruff_releases.yaml` +
+  golden/contract tests + `GITHUB_TOKEN` in `.env.example`. **Verified live:** a 30-release crawl
+  ingested 30 searchable documents. Security advisories are a documented follow-up; v1 ships releases.
+
 - **V1 — arXiv connector** (second v1 increment; parallel-track, not in the soak). `ArxivConnector`
   **subclasses `RssConnector`** — the arXiv export API (`/api/query`) returns Atom, so feedparser
   parsing is reused verbatim and only the query-URL build differs (`fetch.params.search_query` +

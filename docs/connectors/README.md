@@ -540,6 +540,15 @@ wires.
 - **Quirks:** GraphQL has its own point-budget cost model; the connector reads the
   cost headers and paces accordingly.
 
+> **Implemented (v1) — releases.** `connectors/github/releases.py:GithubReleasesConnector` fetches
+> `/repos/{owner}/{repo}/releases` (JSON) → `document` rows (release id = GUID, `html_url` = link,
+> name/tag = title, markdown `body` = body). The optional `GITHUB_TOKEN` (`credentials.ref`) is sent
+> as an `Authorization: Bearer` header for the ~5,000/hour tier (unauth ~60/hour when unset); the
+> token is redacted by `sanitize_for_storage`. `sources/github_ruff_releases.yaml`
+> (`fetch.params.owner`/`repo`/`per_page`). Verified live: a 30-release fetch ingested 30 searchable
+> documents. **Security advisories** (`/security-advisories`) are a documented follow-up (a second
+> `resource` mode); v1 ships releases.
+
 ### 7.6 arXiv — `packages/connectors/arxiv`
 
 - **Access:** `api` (the arXiv export Atom API), or its Atom feed per category.
