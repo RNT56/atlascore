@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session
 
 from atlascore.schemas.crawl_job import JobStatus, JobType
 from atlascore.storage.postgres.models import CrawlJob, Source
-from atlascore.storage.queue import claim_next, complete, enqueue, fail, reclaim_stale
+from atlascore.storage.queue import (
+    claim_next,
+    complete,
+    enqueue,
+    fail,
+    reclaim_stale,
+    requeue_dead,
+)
 from atlascore.storage.sources import load_source_yaml, upsert_source
 
 pytestmark = pytest.mark.integration
@@ -109,6 +116,38 @@ def test_reclaim_stale_claim(migrated_engine: Engine) -> None:
         assert reclaimed == 1
         assert job.status == JobStatus.PENDING.value
         assert job.claimed_by is None
+        session.rollback()
+
+
+def test_requeue_dead_resets_to_pending(migrated_engine: Engine) -> None:
+    with Session(migrated_engine) as session:
+        src = _source(session)
+        session.flush()
+        job = enqueue(
+            session,
+            source_id=src.id,
+            job_type=JobType.FETCH,
+            dedupe_key="rq",
+            scheduled_at=NOW,
+            max_attempts=1,
+        )
+        session.flush()
+        claimed = claim_next(session, worker_id="w", now=NOW)  # attempt 1 == max_attempts
+        assert claimed is not None
+        fail(session, claimed, now=NOW, error="boom")  # over max_attempts -> dead
+        assert claimed.status == JobStatus.DEAD.value
+
+        later = NOW + timedelta(hours=1)
+        assert requeue_dead(session, now=later, job_id=job.id) == 1
+        session.refresh(job)
+        assert job.status == JobStatus.PENDING.value
+        assert job.attempt == 0
+        assert job.claimed_at is None and job.claimed_by is None
+        assert job.last_error is None
+        assert job.finished_at is None
+        assert job.scheduled_at == later
+        # idempotent: the job is no longer dead, so a second requeue affects nothing.
+        assert requeue_dead(session, now=later, job_id=job.id) == 0
         session.rollback()
 
 

@@ -30,6 +30,14 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — `atlas crawl requeue` (DLQ recovery CLI)** (freeze-compatible depth; useful during the
+  unattended soak). Resets dead-letter (`status=dead`) jobs back to `pending` (attempt 0, cleared
+  `claimed_*`/`last_error`/`finished_at`) — `atlas crawl requeue <job_id>` for one, or
+  `atlas crawl requeue --all [--type fetch] --yes` in bulk (bulk needs `--yes`). Backed by
+  `storage.queue.requeue_dead` (idempotent — only `dead` rows match; replay-safe via the existing
+  dedupe keys). Replaces the break-glass requeue SQL the runbook previously documented (§7.3 + the
+  index table reconciled; CLAUDE.md §9 updated). Live-verified end-to-end.
+
 - **V1 — SOPS/age encrypted-secrets path (wired)** ([ADR 0036](docs/decisions/0036-v1-adopt-sops-age-encrypted-secrets.md);
   freeze-compatible — no new source/service). Adds `.sops.yaml` (age-recipient creation rules,
   placeholder to replace with your public key) + `infra/decrypt-secrets.sh` (the vetted deploy/rotate

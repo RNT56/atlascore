@@ -821,16 +821,21 @@ re-claim it. Because jobs are idempotent (deterministic `dedupe_key`, content-ha
 `UNIQUE NULLS NOT DISTINCT` on time series, `unique(content_hash)` on raw), replaying never
 duplicates data.
 
-> **MVP has no `atlas jobs requeue` CLI.** Requeue is the break-glass SQL below (the queue is the
-> single `crawl_job` table); a future `atlas crawl requeue` is a candidate depth follow-up. Inspect
-> the DLQ first with `atlas crawl dlq`.
+Use **`atlas crawl requeue`** (inspect first with `atlas crawl dlq`). It resets dead jobs to
+`pending` (attempt 0, cleared `claimed_*`/`last_error`), idempotently and replay-safely:
 
-Break-glass requeue (reset dead → pending; idempotent, so replays never duplicate):
+```bash
+atlas crawl requeue <job_id>            # requeue one dead job
+atlas crawl requeue --all --yes         # requeue the whole DLQ (--yes required)
+atlas crawl requeue --all --type parse --yes   # only dead parse jobs (e.g. after a parser fix)
+```
+
+If the CLI is unavailable, the equivalent break-glass SQL is:
 
 ```sql
 UPDATE crawl_job
 SET status='pending', attempt=0, claimed_at=NULL, claimed_by=NULL, last_error=NULL,
-    scheduled_at=now()
+    finished_at=NULL, scheduled_at=now()
 WHERE id = '<job_id>' AND status='dead';
 ```
 
@@ -1288,7 +1293,7 @@ If either returns rows, treat it as a secrets incident: rotate the exposed crede
 | 4 Backup | Nightly (auto) or manual | `infra/backup.sh` (offsite); `atlas backup` (local snapshot) |
 | 5 Restore drill | Periodically; real DR | `pg_restore`, `infra/restore_drill.sh` |
 | 6 Purge / erasure | Erase a doc or entity | `atlas purge <id>` |
-| 7 DLQ | Failed jobs piling up | `atlas crawl dlq`, break-glass SQL (no requeue CLI) |
+| 7 DLQ | Failed jobs piling up | `atlas crawl dlq`, `atlas crawl requeue` |
 | 8 Stale source | A feed went silent | `atlas health`, `atlas source test` |
 | 9 Onboard source | Add a new source | `atlas source validate/test`, `atlas crawl once` |
 | 10 Rotate secrets | Credential change | edit `.env` (one place), restart services |

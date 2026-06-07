@@ -8,6 +8,7 @@ daemon is a later step; `once` is the one-shot operator path.
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 import httpx
 import typer
@@ -23,7 +24,7 @@ from atlascore.schemas.crawl_job import JobType
 from atlascore.schemas.source import PolicyStatus
 from atlascore.storage.postgres.base import make_engine
 from atlascore.storage.postgres.models import Source
-from atlascore.storage.queue import dead_jobs, enqueue
+from atlascore.storage.queue import dead_jobs, enqueue, requeue_dead
 from atlascore.storage.rawstore import RawStore
 from atlascore.storage.sources import get_source
 from atlascore.worker.macro import MacroFetchResult
@@ -160,3 +161,49 @@ def dlq_cmd(
                 f"{job.id}  {job.job_type:<9} attempt {job.attempt}/{job.max_attempts}"
                 f"  {job.last_error or ''}"
             )
+
+
+@crawl_app.command("requeue")
+def requeue_cmd(
+    job_id: Annotated[str | None, typer.Argument(help="A specific dead job id to requeue.")] = None,
+    all_dead: Annotated[
+        bool, typer.Option("--all", help="Requeue ALL dead jobs (optionally filtered by --type).")
+    ] = False,
+    job_type: Annotated[
+        str | None,
+        typer.Option("--type", help="With --all: only this job_type (fetch|parse|enrich)."),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Confirm a bulk --all requeue.")] = False,
+) -> None:
+    """Reset dead-letter (`status=dead`) jobs back to `pending` (replaces the break-glass SQL).
+
+    Give a `<job_id>` to requeue one, or `--all [--type fetch]` to requeue the DLQ in bulk. Bulk
+    requeue needs `--yes` (inspect first with `atlas crawl dlq`). Idempotent + replay-safe.
+    """
+    if not job_id and not all_dead:
+        typer.secho(
+            "specify a <job_id>, or --all [--type fetch] to requeue the DLQ in bulk",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if all_dead and not yes:
+        typer.secho(
+            "refusing bulk requeue without --yes (review with `atlas crawl dlq` first)",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    jid: UUID | None = None
+    if job_id:
+        try:
+            jid = UUID(job_id)
+        except ValueError as exc:
+            typer.secho(f"invalid job id: {job_id}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2) from exc
+
+    now = SystemClock().now()
+    with session_or_exit() as session, session.begin():
+        count = requeue_dead(session, now=now, job_id=jid, job_type=job_type)
+    typer.secho(f"requeued {count} job(s)", fg=typer.colors.GREEN)

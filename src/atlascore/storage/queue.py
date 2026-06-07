@@ -173,3 +173,41 @@ def dead_job_summary(session: Session) -> list[tuple[str, str, int]]:
         .order_by(func.count().desc())
     ).all()
     return [(name, job_type, count) for name, job_type, count in rows]
+
+
+def requeue_dead(
+    session: Session,
+    *,
+    now: datetime,
+    job_id: UUID | None = None,
+    job_type: str | None = None,
+    source_id: UUID | None = None,
+) -> int:
+    """Reset DLQ (``status=dead``) jobs back to ``pending`` for a fresh run. Returns rows requeued.
+
+    Resets ``attempt`` to 0, clears ``claimed_*``/``last_error``/``finished_at``, and schedules at
+    ``now`` — mirroring the documented break-glass SQL. Filters compose: ``job_id`` (one job),
+    ``job_type``, ``source_id``. Only ``dead`` rows match, so it is idempotent (a second call
+    requeues nothing). Replays are safe (deterministic ``dedupe_key`` + content-hash upserts)."""
+    conditions = [CrawlJob.status == JobStatus.DEAD.value]
+    if job_id is not None:
+        conditions.append(CrawlJob.id == job_id)
+    if job_type is not None:
+        conditions.append(CrawlJob.job_type == job_type)
+    if source_id is not None:
+        conditions.append(CrawlJob.source_id == source_id)
+    stmt = (
+        update(CrawlJob)
+        .where(*conditions)
+        .values(
+            status=JobStatus.PENDING.value,
+            attempt=0,
+            claimed_at=None,
+            claimed_by=None,
+            last_error=None,
+            finished_at=None,
+            scheduled_at=now,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    return cast("CursorResult[Any]", session.execute(stmt)).rowcount
