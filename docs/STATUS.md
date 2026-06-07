@@ -450,8 +450,14 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
   — `/healthz` + `/v1/search`/`/v1/alerts`/`/v1/sources/health` reusing the storage query fns; capped,
   secret-free, no-auth (loopback/VPN). Verified live (all three endpoints over a real DB). Fourth v1
   increment. **All four requested v1 increments are now built and merged to `main`** (none enabled in
-  the pinned soak clone). Further v1 (ECB/Eurostat more series, GitHub advisories, Prometheus/Grafana,
-  SOPS/age) remain available as future increments.
+  the pinned soak clone).
+- ✅ **GitHub Advisory Database (GHSA) connector** (`connectors/github/advisories.py`,
+  `sources/github_advisories_high.yaml`) — global `/advisories` → security-advisory documents
+  (severity/CVE-marked, like NVD). Verified live (50 high-severity advisories). Fifth v1 increment
+  (the advisories follow-up to the GitHub releases connector).
+- ⏳ Remaining v1/roadmap items are either need-gated or ops-config, not auto-built: Eurostat connector,
+  ECB/Eurostat additional series (more YAMLs), Prometheus/Grafana (roadmap-gated on "if the digest
+  proves insufficient"), SOPS/age adoption. None started — pull on demand.
 
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a

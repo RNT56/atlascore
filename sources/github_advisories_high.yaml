@@ -1,0 +1,29 @@
+# AtlasCore source registry — GitHub Advisory Database (GHSA), high-severity (API, v1).
+#
+# Policy note (operator): the global GitHub Advisory Database is a free, official, public security
+# feed (GitHub-reviewed advisories), documented for programmatic use, so it is marked `approved` for
+# internal research. A personal token is OPTIONAL — `credentials.ref` names an env key (GITHUB_TOKEN)
+# that raises the rate tier; unset ⇒ unauthenticated. The token is NEVER stored here and is redacted
+# from logs/columns (CLAUDE.md §3, §14). Complements the NVD CVE source.
+
+id: github_advisories_high
+name: GitHub Advisory Database — high-severity advisories
+category: security_advisory
+access_method: api
+base_url: https://api.github.com
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+rate_limit: { max_requests: 1, window_seconds: 2 }
+freshness: { target: "2d", warn_after: "4d", error_after: "7d" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: GITHUB_TOKEN }    # OPTIONAL env key name (unauth if unset); never a value
+fetch:
+  connector: atlascore.connectors.github.advisories:GithubAdvisoriesConnector
+  schedule: "15 8 * * *"              # daily
+  timeout_seconds: 30
+  params:
+    severity: high
+    per_page: "50"
