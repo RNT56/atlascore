@@ -30,6 +30,14 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — SOPS/age encrypted-secrets path (wired)** ([ADR 0036](docs/decisions/0036-v1-adopt-sops-age-encrypted-secrets.md);
+  freeze-compatible — no new source/service). Adds `.sops.yaml` (age-recipient creation rules,
+  placeholder to replace with your public key) + `infra/decrypt-secrets.sh` (the vetted deploy/rotate
+  step: requires `SOPS_AGE_KEY_FILE` outside the repo, decrypts `secrets.sops.yaml` → `.env` via
+  `--output-type dotenv`, `chmod 600`). Fixes the previously-documented `sops -d secrets.sops.yaml > .env`
+  format mismatch (YAML→dotenv) and the encrypt command (`--filename-override`). Optional — operators
+  staying `.env`-only are unaffected. Validated end-to-end with a throwaway age key.
+
 - **V1 — Eurostat connector** (sixth v1 increment; parallel-track, not in the soak).
   `EurostatConnector` fetches a series from the free, **keyless** Eurostat dissemination API
   (`/statistics/1.0/data/{dataset}?…&format=JSON`) and decodes the **JSON-stat 2.0** payload into

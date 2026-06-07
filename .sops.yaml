@@ -1,0 +1,19 @@
+# AtlasCore SOPS configuration (OPTIONAL encrypted-secrets path; docs/runbooks §10.2 + ADR 0036).
+#
+# This declares which age recipient(s) `secrets.sops.yaml` is encrypted FOR. The encrypted file is
+# safe to commit; the matching age PRIVATE key lives OUTSIDE the repo (SOPS_AGE_KEY_FILE) and is
+# never committed. `.env` (the decrypted form) stays gitignored.
+#
+# SETUP (one time):
+#   1. age-keygen -o /secure/keys/atlascore-age.key   # prints "Public key: age1..."
+#   2. Replace the placeholder below with that age1... PUBLIC key.
+#   3. Fill .env, then encrypt (--filename-override makes the creation_rule below match):
+#        sops -e --input-type dotenv --output-type yaml --filename-override secrets.sops.yaml \
+#          .env > secrets.sops.yaml
+#      (commit secrets.sops.yaml; NEVER commit .env or the private key.)
+#   4. At deploy: infra/decrypt-secrets.sh  (materializes .env; needs SOPS_AGE_KEY_FILE).
+creation_rules:
+  - path_regex: ^secrets\.sops\.yaml$
+    # REPLACE with your age PUBLIC key (age-keygen prints it). This placeholder is intentionally
+    # invalid so sops refuses to encrypt until you set a real recipient.
+    age: age1REPLACE_WITH_YOUR_AGE_PUBLIC_KEY
