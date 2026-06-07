@@ -263,7 +263,12 @@ markers = [
     "security: SSRF / sanitizer / secrets-in-logs / prompt-injection regressions",
     "live: opt-in, rate-limited tests against real sources (off by default)",
 ]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # Starlette's TestClient warns when httpx (our pinned client) backs it; harmless for the
+    # read-only dashboard tests (the `web` extra). Suppress so warnings-as-errors stays strict elsewhere.
+    "ignore:Using `httpx` with `starlette.testclient`:Warning",
+]
 
 [tool.coverage.run]
 branch = true

@@ -446,8 +446,12 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
   `/repos/{owner}/{repo}/releases` → documents; optional `GITHUB_TOKEN` (Bearer header) for the higher
   rate tier. Verified live (30 ruff releases ingested + searchable). Third v1 increment. (Advisories =
   documented follow-up.)
-- ⏳ Last requested v1 increment: **read-only FastAPI dashboard** (new service + ADR), its own
-  branch → PR → CI → merge; not enabled in the soak clone until the month completes.
+- ✅ **read-only FastAPI dashboard** (`atlascore.api`, `web` extra; [ADR 0035](decisions/0035-v1-read-only-fastapi-dashboard.md))
+  — `/healthz` + `/v1/search`/`/v1/alerts`/`/v1/sources/health` reusing the storage query fns; capped,
+  secret-free, no-auth (loopback/VPN). Verified live (all three endpoints over a real DB). Fourth v1
+  increment. **All four requested v1 increments are now built and merged to `main`** (none enabled in
+  the pinned soak clone). Further v1 (ECB/Eurostat more series, GitHub advisories, Prometheus/Grafana,
+  SOPS/age) remain available as future increments.
 
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a
