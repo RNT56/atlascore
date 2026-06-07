@@ -30,6 +30,16 @@ components, not new sources/services).
 
 ### Added
 
+- **macOS launchd soak templates (`infra/launchd/`)** — the Mac-mini equivalent of `infra/systemd/`,
+  for running the unattended soak on macOS before the Linux/Hetzner deployment. Self-locating wrapper
+  scripts (`bin/soak-{scheduler,worker,digest,backup}.sh`) + four `.plist.template`s (scheduler/worker
+  always-on with `KeepAlive`; digest/backup on a daily `StartCalendarInterval`) + `install.sh`/
+  `uninstall.sh` + a README covering the soak↔dev isolation model. The backup wrapper robustly loads
+  `.env` (tolerant of spaces/parens), maps `POSTGRES_PASSWORD`→`PGPASSWORD`, and prepends Homebrew
+  paths so `pg_dump`/`rclone` resolve under launchd's bare PATH. Validated live on macOS: all plists
+  `plutil`-lint clean, and the scheduler agent loads + runs `atlas scheduler run` under launchd
+  (connects, ticks housekeeping, logs cleanly). Same single-scheduler/single-fetch invariants as systemd.
+
 - **Soak-readiness hardening (pre-deploy)** ([ADR 0034](docs/decisions/0034-soak-readiness-hardening.md)).
   - **Dead-man's-switch:** optional `HEARTBEAT_URL` (+ `HEARTBEAT_TIMEOUT`); `core.heartbeat.ping_heartbeat`
     GETs it best-effort (never raises; logs only the exception type so the per-check token never leaks).
