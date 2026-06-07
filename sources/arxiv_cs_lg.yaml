@@ -1,0 +1,31 @@
+# AtlasCore source registry — arXiv cs.LG (Machine Learning) recent papers (API, v1).
+#
+# Policy note (operator): the arXiv export API is a free, official, KEYLESS interface documented for
+# programmatic use, so it is marked `approved` for internal research (metadata + abstracts only — no
+# full-text PDF harvesting). arXiv asks clients to be gentle (~1 request / 3s); the rate_limit
+# reflects that. No secrets and no private endpoints live here.
+
+id: arxiv_cs_lg
+name: arXiv — cs.LG (Machine Learning) recent papers
+category: research
+access_method: api
+# For an API source, base_url is the API root; the connector appends /api/query + params.
+base_url: https://export.arxiv.org
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+rate_limit: { max_requests: 1, window_seconds: 3 }
+freshness: { target: "2d", warn_after: "4d", error_after: "7d" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }            # arXiv needs no key
+fetch:
+  connector: atlascore.connectors.arxiv.papers:ArxivConnector
+  schedule: "0 7 * * *"               # daily
+  timeout_seconds: 30
+  params:
+    search_query: cat:cs.LG
+    max_results: "50"
+    sort_by: submittedDate
+    sort_order: descending

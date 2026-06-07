@@ -555,6 +555,13 @@ wires.
   only — no full-text PDF harvesting in MVP) via the article parser. Dedupe on arXiv
   id (incl. version suffix) + `content_hash`.
 
+> **Implemented (v1).** `connectors/arxiv/papers.py:ArxivConnector` **subclasses `RssConnector`** —
+> the arXiv export API (`/api/query`) returns Atom, so feedparser parsing is reused verbatim and only
+> the query-URL build differs (`fetch.params.search_query` + optional `max_results`/`start`/
+> `sort_by`/`sort_order`). `sources/arxiv_cs_lg.yaml` (cs.LG recent papers). Each entry's
+> `http://arxiv.org/abs/…` `<id>` is the GUID; `<summary>` (abstract) is the document body. Verified
+> live: a `cat:cs.LG` fetch ingested 50 papers, searchable via `search_documents`.
+
 > **Connector limits summary (configured `rate_limit`):**
 >
 > | Connector | Tier | Documented limit | `rate_limit` config | Key | Conditional |

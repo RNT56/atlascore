@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/0l2A3FSHJg+XrEG7gpGlH7v4mgo</id>
+  <title>arXiv Query: search_query=cat:cs.LG&amp;id_list=&amp;start=0&amp;max_results=2</title>
+  <updated>2026-06-07T09:32:27Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=cat:cs.LG&amp;start=0&amp;max_results=2&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>2</opensearch:itemsPerPage>
+  <opensearch:totalResults>271373</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2606.06494v1</id>
+    <title>TailLoR: Protecting Principal Components in Parameter-Efficient Continual Learning</title>
+    <updated>2026-06-04T17:59:55Z</updated>
+    <link href="https://arxiv.org/abs/2606.06494v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2606.06494v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Parameter-efficient finetuning methods based on spectral decomposition have enabled progress in Continual Learning. In this paper we introduce TailLoR, which utilizes the singular bases U and V of the pre-trained weights as a fixed reference frame to learn a low-rank update applied to the singular value matrix. A soft spectral penalty discourages updates aligned with dominant singular directions, reducing interference while routing fine-grained adaptation into the highly flexible, long-tail spectral coordinates.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-06-04T17:59:55Z</published>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Marius Dragoi</name>
+    </author>
+    <author>
+      <name>Ioana Pintilie</name>
+    </author>
+    <author>
+      <name>Alexandra Dragomir</name>
+    </author>
+    <author>
+      <name>Antonio Barbalau</name>
+    </author>
+    <author>
+      <name>Florin Brad</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2606.06493v1</id>
+    <title>HANDOFF: Humanoid Agentic Task-Space Whole-Body Control via Distilled Complementary Teachers</title>
+    <updated>2026-06-04T17:59:50Z</updated>
+    <link href="https://arxiv.org/abs/2606.06493v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2606.06493v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>For a humanoid robot to be deployed in the real world, the choice of command space (i.e., the interface between task planning and whole-body control) is crucial. Existing whole-body controllers typically demand dense kinematic or spatial references that planners struggle to synthesize from task semantics. We instead propose a compact, explicit interface that is intuitive, general, modular, and expressive enough for diverse manipulation skills. To this end, we introduce HANDOFF, a single humanoid whole-body controller that follows this interface and is distilled via multi-teacher KL distillation under a context-conditioned gating scheme into a mixture-of-experts student from three complementary specialists: whole-body motion tracking with safety-filtered data, locomotion, and fall-recovery. On the Unitree G1, HANDOFF matches state-of-the-art velocity tracking and offers one of the largest robust manipulation workspaces. We further demonstrate hardware feasibility through multiple natural-language-driven task roll-outs, powered by a VLM-driven agentic planner with no task-specific data or controller fine-tuning.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-06-04T17:59:50Z</published>
+    <arxiv:comment>22 pages, 9 figures</arxiv:comment>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Lizhi Yang</name>
+    </author>
+    <author>
+      <name>Junheng Li</name>
+    </author>
+    <author>
+      <name>Nehar Poddar</name>
+    </author>
+    <author>
+      <name>Yiling Hou</name>
+    </author>
+    <author>
+      <name>Gio Huh</name>
+    </author>
+    <author>
+      <name>Robert Griffin</name>
+    </author>
+    <author>
+      <name>Georgia Gkioxari</name>
+    </author>
+    <author>
+      <name>Aaron Ames</name>
+    </author>
+  </entry>
+</feed>
