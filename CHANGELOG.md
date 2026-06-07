@@ -30,6 +30,14 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — arXiv connector** (second v1 increment; parallel-track, not in the soak). `ArxivConnector`
+  **subclasses `RssConnector`** — the arXiv export API (`/api/query`) returns Atom, so feedparser
+  parsing is reused verbatim and only the query-URL build differs (`fetch.params.search_query` +
+  optional `max_results`/`start`/`sort_by`/`sort_order`). Each entry's `arxiv.org/abs/…` id is the
+  GUID; the abstract is the document body. `sources/arxiv_cs_lg.yaml` (cs.LG) + golden/contract tests
+  from a live fixture. **Verified live:** a `cat:cs.LG` crawl ingested 50 papers, searchable via
+  `search_documents`. Keyless; no schema/worker change.
+
 - **V1 — ECB macro connector** (first v1 increment; developed in parallel with the soak, NOT
   deployed into the pinned soak clone). `connectors/ecb/series.py:EcbConnector` fetches a series from
   the free, **keyless** ECB Data Portal (`/service/data/{flow}/{key}?format=csvdata`) and parses the
