@@ -1,0 +1,32 @@
+# AtlasCore source registry — Eurostat HICP annual rate, euro area (API, v1).
+#
+# Policy note (operator): the Eurostat dissemination API is a free, official, KEYLESS data service of
+# the European Commission, documented for programmatic use, so it is marked `approved` for internal
+# research. No API key is required, so `credentials.ref` is null and nothing secret rides in the URL.
+# Non-time dimensions are pinned via fetch.params so the result is a single series over time.
+
+id: eurostat_hicp_ea
+name: Eurostat — HICP all-items, annual rate, euro area
+category: macro_economics
+access_method: api
+# For an API source, base_url is the API root; the connector appends /statistics/1.0/data/{dataset}.
+base_url: https://ec.europa.eu/eurostat/api/dissemination
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+rate_limit: { max_requests: 2, window_seconds: 1 }
+freshness: { target: "45d", warn_after: "60d", error_after: "90d" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: null }            # Eurostat needs no key
+fetch:
+  connector: atlascore.connectors.eurostat.series:EurostatConnector
+  schedule: "0 6 * * *"               # daily; HICP is monthly, so this just catches releases/revisions
+  timeout_seconds: 40
+  params:
+    dataset: prc_hicp_manr            # HICP — monthly data (annual rate of change)
+    series_id: prc_hicp_manr.CP00.EA.RCH_A   # stable id stored on each time_series_point row
+    coicop: CP00                      # all-items HICP
+    geo: EA                           # euro area
+    unit: RCH_A                       # annual rate of change (a Eurostat dimension filter, not a label)

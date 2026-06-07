@@ -455,9 +455,14 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
   `sources/github_advisories_high.yaml`) — global `/advisories` → security-advisory documents
   (severity/CVE-marked, like NVD). Verified live (50 high-severity advisories). Fifth v1 increment
   (the advisories follow-up to the GitHub releases connector).
-- ⏳ Remaining v1/roadmap items are either need-gated or ops-config, not auto-built: Eurostat connector,
-  ECB/Eurostat additional series (more YAMLs), Prometheus/Grafana (roadmap-gated on "if the digest
-  proves insufficient"), SOPS/age adoption. None started — pull on demand.
+- ✅ **Eurostat connector** (`connectors/eurostat/series.py`, `sources/eurostat_hicp_ea.yaml`) —
+  keyless JSON-stat dissemination API → `time_series_point` via the macro path; non-time dims pinned via
+  params, unit read from the payload. Includes a macro-worker fix so a connector-derived unit isn't
+  clobbered by a `unit=` filter param (FRED behaviour unchanged). Verified live (348 euro-area HICP
+  points, `unit='Annual rate of change'`). Sixth v1 increment.
+- ⏳ Remaining roadmap items are need-gated or ops-config, NOT auto-built (over-scope is the #1 risk,
+  §2.5/§26): Prometheus/Grafana (gated on "if the digest proves insufficient"), SOPS/age adoption,
+  more macro series (just more YAMLs). The right next step is **operational — start the soak**.
 
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a

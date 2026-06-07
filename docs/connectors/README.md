@@ -584,6 +584,7 @@ wires.
 > | RSS | — | polite, no formal cap | `{1, 1}`–`{1, 5}` | none | ETag + Last-Modified |
 > | FRED | keyed | 120 / 60s | `{100, 60}` | `FRED_API_KEY` (query) | realtime cursor |
 > | ECB | no key | polite (keyless) | `{5, 1}` | none | idempotent upsert |
+> | Eurostat | no key | polite (keyless) | `{2, 1}` | none | idempotent upsert |
 > | SEC EDGAR | public | **10 / 1s** + UA required | `{10, 1}` | none (UA required) | ETag, date cursor |
 > | NVD | no key | ~5 / 30s | `{5, 30}` | optional `NVD_API_KEY` (header) | lastMod window |
 > | NVD | keyed | ~50 / 30s | `{50, 30}` | `NVD_API_KEY` (header) | lastMod window |
@@ -612,6 +613,26 @@ wires.
 > **Implemented (v1).** `connectors/ecb/series.py:EcbConnector` (`output_kind=timeseries`);
 > `sources/ecb_eur_usd.yaml` (EUR/USD daily reference rate). Verified live: a full-history fetch
 > upserts ~7k points with `provider=ecb`, `unit=USD`.
+
+### 7.8 Eurostat — `packages/connectors/eurostat` (v1)
+
+- **Access:** `api` (JSON-stat 2.0 via the Eurostat dissemination API). EU macro time-series.
+- **Policy:** `approved`; free, official, **keyless** public data.
+- **Limits:** no published hard cap; be polite (`{2, 1}`) and honor `Retry-After`.
+- **Credentials:** none — `credentials.ref: null`.
+- **Addressing:** `fetch.params.dataset` (e.g. `prc_hicp_manr`) → path; **pin every non-time dimension**
+  via params (Eurostat codes like `coicop`/`geo`/`unit`) so the result is a single series; `series_id`
+  is the stored id. All non-reserved params pass through as query filters (+ `format=JSON`).
+- **Output:** `time_series_point` rows via the macro path. The connector decodes JSON-stat by mapping
+  each flat `value` index back to its `time` period using the `size`/`dimension` metadata (row-major
+  strides); periods cover annual/quarterly/monthly; missing values → `null`. **The unit label comes
+  from the payload's `unit` dimension** — so the macro worker only applies `params.unit` as a label
+  when the connector returns none (otherwise a `unit=` *filter* code would clobber the parsed label).
+- **Role:** powers `get_macro_series` + the `macro_release` alert, same as FRED/ECB.
+
+> **Implemented (v1).** `connectors/eurostat/series.py:EurostatConnector` (`output_kind=timeseries`);
+> `sources/eurostat_hicp_ea.yaml` (euro-area HICP annual rate). Verified live: a full-history fetch
+> upserts ~348 points with `provider=eurostat`, `unit='Annual rate of change'`.
 
 ---
 

@@ -30,6 +30,16 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — Eurostat connector** (sixth v1 increment; parallel-track, not in the soak).
+  `EurostatConnector` fetches a series from the free, **keyless** Eurostat dissemination API
+  (`/statistics/1.0/data/{dataset}?…&format=JSON`) and decodes the **JSON-stat 2.0** payload into
+  `time_series_point` observations via the existing macro path (`output_kind=timeseries`). Non-time
+  dimensions are pinned via `fetch.params` (Eurostat codes); the connector maps each flat `value` index
+  back to its time period using the `size`/`dimension` strides, and reads the unit label from the
+  payload. `sources/eurostat_hicp_ea.yaml` (euro-area HICP annual rate) + golden/contract tests.
+  **Verified live:** a full-history crawl upserted 348 points (`provider=eurostat`, `unit='Annual rate
+  of change'`).
+
 - **V1 — GitHub Advisory Database (GHSA) connector** (fifth v1 increment; parallel-track, not in the
   soak). `GithubAdvisoriesConnector` fetches the **global** GitHub Advisory Database (`/advisories`,
   JSON) → `document` rows (GHSA id = GUID, `html_url` = link, summary = title, a severity/CVE-marked
