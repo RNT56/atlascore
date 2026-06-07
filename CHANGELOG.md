@@ -30,6 +30,16 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — read-only FastAPI dashboard API** (`atlascore.api`, behind the `web` extra; fourth v1
+  increment, parallel-track, not in the soak — [ADR 0035](docs/decisions/0035-v1-read-only-fastapi-dashboard.md)).
+  `create_app()` exposes `/healthz` + `/v1/search`, `/v1/alerts`, `/v1/sources/health`, reusing the
+  existing `search_documents`/`list_alerts`/`list_source_health` query functions (one source of truth).
+  Read-only, capped at `API_MAX_LIMIT=100`, returns provenance, never returns secrets/internal
+  endpoints; no auth by design (loopback/VPN). The per-request session is a module-level `app.state`
+  dependency (avoids a `from __future__ import annotations` closure-`Depends` 422). Unit (no-DB) +
+  integration (live-DB, all three endpoints, asserts no secret leak) tests; run via
+  `uvicorn atlascore.api.app:app`.
+
 - **V1 — GitHub releases connector** (third v1 increment; parallel-track, not in the soak).
   `GithubReleasesConnector` fetches `/repos/{owner}/{repo}/releases` (JSON) → `document` rows (release
   id = GUID, `html_url` = link, name/tag = title, markdown `body` = body). An optional `GITHUB_TOKEN`
