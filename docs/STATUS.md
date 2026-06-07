@@ -425,8 +425,15 @@ deterministic offline default as the CI path and are contract-tested with respx 
 
 **§5 freeze is now in force.** Per CLAUDE.md §5, **do not add a new source or service** until the
 current set has run **unattended for a month**. The right next step is operational: deploy the B19
-scheduler + worker (one of each) using the vetted `infra/systemd/` units, enable a real
+scheduler + worker (one of each) using the vetted `infra/systemd/` units (Linux/Hetzner) or
+`infra/launchd/` agents (the current Mac-mini soak — `infra/launchd/install.sh`), enable a real
 embedding/LLM/Tika backend if desired, and let it run.
+
+**Current plan (2026-06-07):** the soak runs on a **Mac mini** (launchd; ultimately moving to a
+Hetzner VPS), with **ntfy** for digest/alert delivery + a healthchecks.io dead-man's-switch. Run it
+from a **separate pinned clone** (`~/atlascore-soak`) so ongoing V1 development in the main checkout
+never touches the soak's DB/raw/code (see `infra/launchd/README.md` for the isolation model). V1 work
+proceeds in branches during the soak and is NOT deployed into the soak instance until the month is up.
 
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a
