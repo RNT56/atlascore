@@ -464,6 +464,9 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
   [ADR 0036](decisions/0036-v1-adopt-sops-age-encrypted-secrets.md)) — optional, freeze-compatible
   (no source/service); decrypt key stays outside the repo. Validated end-to-end with a throwaway key.
   Good prep for the Hetzner move.
+- ✅ **`atlas crawl requeue`** (DLQ recovery CLI; `storage.queue.requeue_dead`) — resets dead jobs →
+  pending (one by id, or `--all [--type] --yes`), replacing the break-glass SQL. Useful during the
+  unattended month. Live-verified. Freeze-compatible depth.
 - ⏳ Remaining roadmap items are need-gated, NOT auto-built (over-scope is the #1 risk, §2.5/§26):
   **Prometheus/Grafana** (§15.2-gated on "if the digest proves insufficient" — can't be true before the
   soak runs), and more macro series (just more YAMLs). The right next step is **operational — start the

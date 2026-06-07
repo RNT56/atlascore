@@ -18,6 +18,27 @@ def test_crawl_help_lists_subcommands() -> None:
     assert result.exit_code == 0
     assert "enqueue" in result.output
     assert "dlq" in result.output
+    assert "requeue" in result.output
+
+
+def test_requeue_requires_target() -> None:
+    # No job_id and no --all → usage error (exit 2), before any DB access.
+    result = runner.invoke(app, ["crawl", "requeue"])
+    assert result.exit_code == 2
+    assert "specify a <job_id>" in result.output
+
+
+def test_requeue_bulk_needs_yes() -> None:
+    # --all without --yes is refused (exit 1) before any DB access.
+    result = runner.invoke(app, ["crawl", "requeue", "--all"])
+    assert result.exit_code == 1
+    assert "--yes" in result.output
+
+
+def test_requeue_invalid_job_id() -> None:
+    result = runner.invoke(app, ["crawl", "requeue", "not-a-uuid"])
+    assert result.exit_code == 2
+    assert "invalid job id" in result.output
 
 
 def test_crawl_enqueue_exits_cleanly_without_db(monkeypatch: pytest.MonkeyPatch) -> None:
