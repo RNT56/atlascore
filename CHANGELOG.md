@@ -30,6 +30,14 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — GitHub Advisory Database (GHSA) connector** (fifth v1 increment; parallel-track, not in the
+  soak). `GithubAdvisoriesConnector` fetches the **global** GitHub Advisory Database (`/advisories`,
+  JSON) → `document` rows (GHSA id = GUID, `html_url` = link, summary = title, a severity/CVE-marked
+  description = body, like NVD). Optional `ecosystem`/`severity`/`type` filters; optional `GITHUB_TOKEN`
+  Bearer for the higher rate tier. `sources/github_advisories_high.yaml` + golden/contract tests.
+  **Verified live:** a high-severity crawl ingested 50 searchable advisories. Complements the NVD CVE
+  source (GHSA is often earlier + ecosystem-specific). No schema/worker change.
+
 - **V1 — read-only FastAPI dashboard API** (`atlascore.api`, behind the `web` extra; fourth v1
   increment, parallel-track, not in the soak — [ADR 0035](docs/decisions/0035-v1-read-only-fastapi-dashboard.md)).
   `create_app()` exposes `/healthz` + `/v1/search`, `/v1/alerts`, `/v1/sources/health`, reusing the

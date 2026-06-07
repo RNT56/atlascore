@@ -546,8 +546,14 @@ wires.
 > as an `Authorization: Bearer` header for the ~5,000/hour tier (unauth ~60/hour when unset); the
 > token is redacted by `sanitize_for_storage`. `sources/github_ruff_releases.yaml`
 > (`fetch.params.owner`/`repo`/`per_page`). Verified live: a 30-release fetch ingested 30 searchable
-> documents. **Security advisories** (`/security-advisories`) are a documented follow-up (a second
-> `resource` mode); v1 ships releases.
+> documents.
+
+> **Implemented (v1) — advisories.** `connectors/github/advisories.py:GithubAdvisoriesConnector`
+> fetches the **global** GitHub Advisory Database (`/advisories`, JSON) → `document` rows (GHSA id =
+> GUID, `html_url` = link, summary = title, a severity/CVE-marked description = body, like NVD).
+> Optional `fetch.params` filters: `ecosystem`/`severity`/`type`. `sources/github_advisories_high.yaml`
+> (high-severity). Verified live: a high-severity fetch ingested 50 searchable advisories. Complements
+> the NVD CVE source (GHSA is often earlier + ecosystem-specific).
 
 ### 7.6 arXiv — `packages/connectors/arxiv`
 

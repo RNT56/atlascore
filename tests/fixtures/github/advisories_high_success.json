@@ -1,0 +1,20 @@
+[
+  {
+    "ghsa_id": "GHSA-5m7x-g9jc-x5g7",
+    "cve_id": "CVE-2026-26422",
+    "severity": "high",
+    "html_url": "https://github.com/advisories/GHSA-5m7x-g9jc-x5g7",
+    "summary": "clash-verge-service-ipc before 2.3.0 has a world-reachable IPC endpoint, leading to local...",
+    "description": "clash-verge-service-ipc before 2.3.0 has a world-reachable IPC endpoint, leading to local privilege escalation.",
+    "published_at": "2026-06-07T00:31:43Z"
+  },
+  {
+    "ghsa_id": "GHSA-3c6h-v9pm-2435",
+    "cve_id": "CVE-2026-11413",
+    "severity": "high",
+    "html_url": "https://github.com/advisories/GHSA-3c6h-v9pm-2435",
+    "summary": "A security vulnerability has been detected in JingDong JD Cloud Box AX6600 4.5.3.r4546. The...",
+    "description": "A security vulnerability has been detected in JingDong JD Cloud Box AX6600 4.5.3.r4546. The impacted element is the function set_macfilter of the file /sbin/jdcweb_rpc. The manipulation leads to stack-based buffer overflow. It is possible to initiate the attack remotely. The exploit has been disclos",
+    "published_at": "2026-06-06T15:31:18Z"
+  }
+]
