@@ -30,6 +30,16 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — ECB macro connector** (first v1 increment; developed in parallel with the soak, NOT
+  deployed into the pinned soak clone). `connectors/ecb/series.py:EcbConnector` fetches a series from
+  the free, **keyless** ECB Data Portal (`/service/data/{flow}/{key}?format=csvdata`) and parses the
+  CSV into `time_series_point` observations via the existing macro path (`output_kind=timeseries`, no
+  worker/schema change). Unlike FRED, the unit is read inline from the CSV `UNIT` column; TIME_PERIOD
+  parsing covers daily/monthly/quarterly/annual; missing values → `null`. `sources/ecb_eur_usd.yaml`
+  (EUR/USD daily reference rate) + golden/contract tests from authentic fixtures. **Verified live:** a
+  full-history crawl upserted ~7,083 points (`provider=ecb`, `unit=USD`). Powers `get_macro_series` +
+  `macro_release` like FRED.
+
 - **macOS launchd soak templates (`infra/launchd/`)** — the Mac-mini equivalent of `infra/systemd/`,
   for running the unattended soak on macOS before the Linux/Hetzner deployment. Self-locating wrapper
   scripts (`bin/soak-{scheduler,worker,digest,backup}.sh`) + four `.plist.template`s (scheduler/worker

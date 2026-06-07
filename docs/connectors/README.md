@@ -561,6 +561,7 @@ wires.
 > |---|---|---|---|---|---|
 > | RSS | — | polite, no formal cap | `{1, 1}`–`{1, 5}` | none | ETag + Last-Modified |
 > | FRED | keyed | 120 / 60s | `{100, 60}` | `FRED_API_KEY` (query) | realtime cursor |
+> | ECB | no key | polite (keyless) | `{5, 1}` | none | idempotent upsert |
 > | SEC EDGAR | public | **10 / 1s** + UA required | `{10, 1}` | none (UA required) | ETag, date cursor |
 > | NVD | no key | ~5 / 30s | `{5, 30}` | optional `NVD_API_KEY` (header) | lastMod window |
 > | NVD | keyed | ~50 / 30s | `{50, 30}` | `NVD_API_KEY` (header) | lastMod window |
@@ -570,6 +571,25 @@ wires.
 >
 > Provider numbers are the published guidance at 2026-06-03; AtlasCore always
 > configures **at or below** the documented limit and respects `Retry-After`.
+
+### 7.7 ECB (European Central Bank) — `packages/connectors/ecb` (v1)
+
+- **Access:** `api` (CSV via the ECB Data Portal). Euro-area macro time-series.
+- **Policy:** `approved`; free, official, **keyless** public data.
+- **Limits:** no published hard cap; be polite (`{5, 1}`) and honor `Retry-After`.
+- **Credentials:** none — `credentials.ref: null`; nothing secret ever rides in the URL.
+- **Addressing:** `fetch.params.flow_ref` (e.g. `EXR`) + `series_key` (e.g. `D.USD.EUR.SP00.A`)
+  build `/service/data/{flow}/{key}?format=csvdata`; `params.series_id` is the stable id stored on
+  each point.
+- **Output:** `time_series_point` rows (`kind=observation`) via the macro path — the same idempotent
+  upsert as FRED. **The unit comes from the CSV `UNIT` column** (no operator label needed).
+  TIME_PERIOD parsing covers daily/monthly/quarterly/annual; a missing `OBS_VALUE` → `null` (never
+  zero-filled, §15).
+- **Role:** powers `get_macro_series` + the `macro_release` alert, same as FRED.
+
+> **Implemented (v1).** `connectors/ecb/series.py:EcbConnector` (`output_kind=timeseries`);
+> `sources/ecb_eur_usd.yaml` (EUR/USD daily reference rate). Verified live: a full-history fetch
+> upserts ~7k points with `provider=ecb`, `unit=USD`.
 
 ---
 
