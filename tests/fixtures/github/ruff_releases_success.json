@@ -1,0 +1,24 @@
+[
+  {
+    "id": 334471331,
+    "node_id": "RE_kwDOHy0Bzc4T76Cj",
+    "tag_name": "0.15.16",
+    "name": "0.15.16",
+    "html_url": "https://github.com/astral-sh/ruff/releases/tag/0.15.16",
+    "published_at": "2026-06-04T16:34:11Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "## Release Notes\n\nReleased on 2026-06-04.\n\n### Preview features\n\n- \\[`flake8-async`\\] Implement `yield-in-context-manager-in-async-generator` (`ASYNC119`) ([#24644](https://github.com/astral-sh/ruff/pull/24644))\n- \\[`pylint`\\] Narrow diagnostic range and exclude cases without exc"
+  },
+  {
+    "id": 330889134,
+    "node_id": "RE_kwDOHy0Bzc4TuPeu",
+    "tag_name": "0.15.15",
+    "name": "0.15.15",
+    "html_url": "https://github.com/astral-sh/ruff/releases/tag/0.15.15",
+    "published_at": "2026-05-28T14:18:02Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "## Release Notes\n\nReleased on 2026-05-28.\n\n### Preview features\n\n- Fix Markdown closing fence handling ([#25310](https://github.com/astral-sh/ruff/pull/25310))\n- \\[`pyflakes`\\] Report duplicate imports in `typing.TYPE_CHECKING` block (`F811`) ([#22560](https://github.com/astral-s"
+  }
+]

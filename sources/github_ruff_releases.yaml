@@ -1,0 +1,30 @@
+# AtlasCore source registry — GitHub releases for astral-sh/ruff (API, v1).
+#
+# Policy note (operator): the GitHub REST API is documented for programmatic use and public repo
+# releases are public, so this is marked `approved` for internal research. A personal token is
+# OPTIONAL — `credentials.ref` names an env key (GITHUB_TOKEN) that, when set, raises the rate tier
+# from ~60/hour to ~5,000/hour; when unset the connector fetches unauthenticated. The token is NEVER
+# stored here and is redacted from logs/columns (CLAUDE.md §3, §14).
+
+id: github_ruff_releases
+name: GitHub — astral-sh/ruff releases
+category: code_releases
+access_method: api
+base_url: https://api.github.com
+enabled: true
+policy:
+  status: approved
+  robots: respect
+  allowed_uses: [internal_search, internal_summary, agent_retrieval]
+rate_limit: { max_requests: 1, window_seconds: 2 }
+freshness: { target: "14d", warn_after: "30d", error_after: "60d" }
+retention: { raw: "2y", normalized: "permanent" }
+credentials: { ref: GITHUB_TOKEN }    # OPTIONAL env key name (unauth if unset); never a value
+fetch:
+  connector: atlascore.connectors.github.releases:GithubReleasesConnector
+  schedule: "0 8 * * *"               # daily
+  timeout_seconds: 30
+  params:
+    owner: astral-sh
+    repo: ruff
+    per_page: "30"

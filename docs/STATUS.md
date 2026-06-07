@@ -442,9 +442,12 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
 - ✅ **arXiv connector** (`connectors/arxiv`, `sources/arxiv_cs_lg.yaml`) — subclasses `RssConnector`
   (arXiv API returns Atom → feedparser reused; only the query URL differs). Verified live (50 cs.LG
   papers ingested + searchable). Keyless. Second v1 increment.
-- ⏳ Next v1 increments (requested: build all): **GitHub** connector (documents + token) →
-  **read-only FastAPI dashboard** (new service + ADR). Each its own branch → PR → CI → merge; none
-  enabled in the soak clone until the month completes.
+- ✅ **GitHub releases connector** (`connectors/github`, `sources/github_ruff_releases.yaml`) —
+  `/repos/{owner}/{repo}/releases` → documents; optional `GITHUB_TOKEN` (Bearer header) for the higher
+  rate tier. Verified live (30 ruff releases ingested + searchable). Third v1 increment. (Advisories =
+  documented follow-up.)
+- ⏳ Last requested v1 increment: **read-only FastAPI dashboard** (new service + ADR), its own
+  branch → PR → CI → merge; not enabled in the soak clone until the month completes.
 
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a
