@@ -141,8 +141,8 @@ chmod 600 /opt/atlascore/.env
 $EDITOR /opt/atlascore/.env        # set DATABASE_URL, RAW_STORE_DIR, backends, UA, etc.
 
 #    If using a committed SOPS/age secrets file instead (see runbook 10), decrypt at deploy:
-#    sops -d /opt/atlascore/secrets.sops.yaml > /opt/atlascore/.env
-#    (SOPS_AGE_KEY_FILE must point OUTSIDE the repo.)
+#    export SOPS_AGE_KEY_FILE=/secure/keys/atlascore-age.key   # OUTSIDE the repo
+#    infra/decrypt-secrets.sh                                  # -> .env (chmod 600)
 
 # 4. Bring up Postgres (+ optional Meilisearch).
 cd /opt/atlascore && docker compose -f infra/docker-compose.yml up -d db
@@ -1011,28 +1011,32 @@ sudo systemctl restart atlascore-worker-proc@*.service      # if an enrichment/L
 sudo systemctl restart atlascore-scheduler.service          # if a schedule-affecting key changed
 ```
 
-### 10.2 SOPS/age option (concrete shape)
+### 10.2 SOPS/age option (wired — ADR 0036)
 
-The committed-encrypted-secrets option is fully specified so it is implementable. If you use
-it:
+The committed-encrypted-secrets option is implemented (`.sops.yaml` + `infra/decrypt-secrets.sh`).
+`secrets.sops.yaml` is a **flat YAML map of env vars** encrypted with age — safe to commit; it
+decrypts to dotenv (`.env`). Shape:
 
-- `secrets.sops.yaml` lives in the repo tree (encrypted; safe to commit).
-- `.sops.yaml` (repo root) declares the age recipient(s).
-- `SOPS_AGE_KEY_FILE` is an env var pointing to the private key **outside** the repo
-  (password manager export / hardware-key-backed file). The key never enters the repo.
-- Deploy step: `sops -d /opt/atlascore/secrets.sops.yaml > /opt/atlascore/.env` (then
-  `chmod 600`), or rotate inside the encrypted file directly:
+- `.sops.yaml` (repo root) declares the age recipient — **replace the placeholder with your age
+  PUBLIC key** (`age-keygen` prints it). The encrypted `secrets.sops.yaml` is committable.
+- `SOPS_AGE_KEY_FILE` points to the age PRIVATE key **outside** the repo (password manager /
+  hardware-key-backed file). The key never enters the repo.
 
-  ```bash
-  # Rotate a value inside the encrypted file (re-encrypts in place).
-  SOPS_AGE_KEY_FILE=/secure/keys/atlascore-age.key \
-    sops --set '["EMBEDDING_API_KEY"] "<new-value>"' /opt/atlascore/secrets.sops.yaml
-  # Re-materialize the runtime env and restart affected services.
-  SOPS_AGE_KEY_FILE=/secure/keys/atlascore-age.key \
-    sops -d /opt/atlascore/secrets.sops.yaml > /opt/atlascore/.env
-  chmod 600 /opt/atlascore/.env
-  sudo systemctl restart atlascore-worker-proc@*.service
-  ```
+```bash
+# One-time: generate a key, set its PUBLIC key as the recipient in .sops.yaml, then encrypt .env.
+age-keygen -o /secure/keys/atlascore-age.key          # prints "Public key: age1..." -> .sops.yaml
+sops -e --input-type dotenv --output-type yaml \
+  --filename-override secrets.sops.yaml .env > secrets.sops.yaml   # commit this
+
+# At deploy: materialize .env from the encrypted file (the vetted helper does decrypt + chmod 600).
+export SOPS_AGE_KEY_FILE=/secure/keys/atlascore-age.key
+infra/decrypt-secrets.sh                               # -> .env (chmod 600)
+
+# Rotate a single value inside the encrypted file, then re-materialize + restart affected services.
+sops --set '["EMBEDDING_API_KEY"] "<new-value>"' secrets.sops.yaml
+infra/decrypt-secrets.sh
+sudo systemctl restart atlascore-worker-proc@*.service
+```
 
 > If you prefer the simpler posture, SOPS is optional: declare secrets `.env`-only (gitignored)
 > for MVP and skip the encrypted file. Either choice is consistent with "no plaintext secrets

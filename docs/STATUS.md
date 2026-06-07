@@ -460,9 +460,14 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
   params, unit read from the payload. Includes a macro-worker fix so a connector-derived unit isn't
   clobbered by a `unit=` filter param (FRED behaviour unchanged). Verified live (348 euro-area HICP
   points, `unit='Annual rate of change'`). Sixth v1 increment.
-- ⏳ Remaining roadmap items are need-gated or ops-config, NOT auto-built (over-scope is the #1 risk,
-  §2.5/§26): Prometheus/Grafana (gated on "if the digest proves insufficient"), SOPS/age adoption,
-  more macro series (just more YAMLs). The right next step is **operational — start the soak**.
+- ✅ **SOPS/age encrypted-secrets path** (`.sops.yaml` + `infra/decrypt-secrets.sh`;
+  [ADR 0036](decisions/0036-v1-adopt-sops-age-encrypted-secrets.md)) — optional, freeze-compatible
+  (no source/service); decrypt key stays outside the repo. Validated end-to-end with a throwaway key.
+  Good prep for the Hetzner move.
+- ⏳ Remaining roadmap items are need-gated, NOT auto-built (over-scope is the #1 risk, §2.5/§26):
+  **Prometheus/Grafana** (§15.2-gated on "if the digest proves insufficient" — can't be true before the
+  soak runs), and more macro series (just more YAMLs). The right next step is **operational — start the
+  soak**.
 
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a
