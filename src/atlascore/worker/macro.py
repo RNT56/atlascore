@@ -106,7 +106,10 @@ def run_macro_fetch_job(
 
     series = connector.parse_observations(outcome.content, series_id=series_id)
     unit = params.get("unit")
-    if unit:  # operator-provided human unit label (the observations endpoint omits it)
+    # Operator-provided human unit label (FRED's observations endpoint omits it). Only applied when
+    # the connector did NOT already derive a unit from the payload — otherwise a connector whose
+    # `unit` param is a real dimension FILTER (Eurostat `unit=RCH_A`) would clobber the parsed label.
+    if unit and series.unit is None:
         series = replace(series, unit=unit)
     points = upsert_observations(session, series)
     return MacroFetchResult(False, points, series_id, raw_doc.id)
