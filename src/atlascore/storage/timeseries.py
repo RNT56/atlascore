@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -112,3 +112,35 @@ def read_macro_series(
         points=[SeriesPoint(ts=r.ts, value=r.value, vintage=r.vintage) for r in rows],
         truncated=truncated,
     )
+
+
+@dataclass(frozen=True)
+class SeriesRef:
+    """One distinct stored series, for the WebUI macro browser."""
+
+    provider: str
+    series_id: str
+    unit: str | None
+    point_count: int
+    latest_ts: datetime | None
+
+
+def list_series(session: Session, *, limit: int = 500) -> list[SeriesRef]:
+    """Return the distinct stored series (provider, series_id) with point count + latest ts."""
+    stmt = (
+        select(
+            TimeSeriesPoint.provider,
+            TimeSeriesPoint.series_id,
+            func.max(TimeSeriesPoint.unit),
+            func.count(),
+            func.max(TimeSeriesPoint.ts),
+        )
+        .where(TimeSeriesPoint.kind == "observation")
+        .group_by(TimeSeriesPoint.provider, TimeSeriesPoint.series_id)
+        .order_by(TimeSeriesPoint.provider, TimeSeriesPoint.series_id)
+        .limit(limit)
+    )
+    return [
+        SeriesRef(provider=p, series_id=s, unit=u, point_count=c, latest_ts=t)
+        for p, s, u, c, t in session.execute(stmt).all()
+    ]

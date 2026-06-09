@@ -467,6 +467,12 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
 - ✅ **`atlas crawl requeue`** (DLQ recovery CLI; `storage.queue.requeue_dead`) — resets dead jobs →
   pending (one by id, or `--all [--type] --yes`), replacing the break-glass SQL. Useful during the
   unattended month. Live-verified. Freeze-compatible depth.
+- ✅ **Server-rendered read-only WebUI** (`atlascore.api.web`, `web` extra;
+  [ADR 0037](decisions/0037-v1-server-rendered-read-only-webui.md)) — Jinja2 + zero-JS browser
+  dashboard on the existing `api` app (`/`, `/search`, `/documents/{id}`, `/alerts`, `/sources`,
+  `/macro`). Read-only, autoescaped (XSS-safe), secret-free, no auth (loopback/VPN). `uvicorn
+  atlascore.api.app:app` now serves UI + JSON. Unit + live integration tests; verified live via
+  uvicorn against real ingested data (Fed docs + ECB series, `<mark>` search, SVG sparkline).
 - ⏳ Remaining roadmap items are need-gated, NOT auto-built (over-scope is the #1 risk, §2.5/§26):
   **Prometheus/Grafana** (§15.2-gated on "if the digest proves insufficient" — can't be true before the
   soak runs), and more macro series (just more YAMLs). The right next step is **operational — start the

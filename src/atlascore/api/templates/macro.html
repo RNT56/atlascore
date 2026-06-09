@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Macro series{% endblock %}
+{% block content %}
+<h1>Macro time-series</h1>
+{% if series %}
+<table>
+  <thead><tr><th>provider</th><th>series</th><th>unit</th><th>points</th><th>latest</th></tr></thead>
+  <tbody>
+  {% for s in series %}
+    <tr>
+      <td>{{ s.provider }}</td>
+      <td><a href="/macro/series?provider={{ s.provider | urlencode }}&amp;series_id={{ s.series_id | urlencode }}">{{ s.series_id }}</a></td>
+      <td class="muted">{{ s.unit or "—" }}</td>
+      <td>{{ s.point_count }}</td>
+      <td class="muted">{{ s.latest_ts | dt }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No series stored yet. Ingest a macro source (FRED / ECB / Eurostat) first.</p>
+{% endif %}
+{% endblock %}

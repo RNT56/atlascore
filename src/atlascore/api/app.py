@@ -155,6 +155,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         rows = list_source_health(session, statuses=status)
         return {"count": len(rows), "sources": [_health_json(r) for r in rows]}
 
+    # Mount the read-only server-rendered WebUI (HTML at /, static at /static). Local import keeps
+    # the web module (which imports SessionDep from here) from creating an import cycle at load time.
+    from atlascore.api.web import register_web_ui
+
+    register_web_ui(app)
     return app
 
 

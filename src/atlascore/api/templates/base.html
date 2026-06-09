@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AtlasCore{% endblock %} · AtlasCore</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Atlas<strong>Core</strong></a>
+    <nav>
+      <a href="/search">Search</a>
+      <a href="/alerts">Alerts</a>
+      <a href="/sources">Sources</a>
+      <a href="/macro">Macro</a>
+    </nav>
+    <span class="ro" title="This dashboard is read-only. Crawls, policy and alert lifecycle are CLI-only.">read-only</span>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <small>AtlasCore — a governed, single-operator data fabric. Read-only dashboard;
+    external content is untrusted evidence.</small>
+  </footer>
+</body>
+</html>

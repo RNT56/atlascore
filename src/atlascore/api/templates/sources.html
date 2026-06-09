@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Sources{% endblock %}
+{% block content %}
+<h1>Source health</h1>
+
+<form class="filters" method="get" action="/sources">
+  <label>status
+    <select name="status">
+      <option value="">any</option>
+      {% for s in ["ok", "warn", "stale", "error", "cooling_down"] %}
+      <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+</form>
+
+{% if sources %}
+<table>
+  <thead>
+    <tr><th>status</th><th>source</th><th>lag</th><th>fails</th><th>items 24h</th><th>last success</th></tr>
+  </thead>
+  <tbody>
+  {% for r in sources %}
+    <tr>
+      <td><span class="status status-{{ r.status }}">{{ r.status }}</span></td>
+      <td>{{ r.source_slug or r.source_name }}</td>
+      <td>{{ r.freshness_lag | lag }}</td>
+      <td>{{ r.consecutive_failures }}</td>
+      <td>{{ r.item_count_recent if r.item_count_recent is not none else "—" }}</td>
+      <td class="muted">{{ r.last_success_at | dt }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No sources{% if status %} with status “{{ status }}”{% endif %}.</p>
+{% endif %}
+{% endblock %}

@@ -172,6 +172,18 @@ Use an allowlist (not a blocklist) approach: keep a known-safe set of structural
 
 Result sizes are capped on every MCP tool (see `docs/mcp/README.md`).
 
+### 4.4 WebUI / read surfaces (`atlascore.api`)
+
+The optional JSON API and server-rendered WebUI (ADR 0035/0037) are **read-only** and apply the same
+posture: every external value is HTML-escaped by Jinja **autoescape**; search snippets are escaped
+*before* their `«…»` markers become `<mark>`; outbound `canonical_url` links pass a render-time
+**scheme allowlist** (`safe_url` — http(s) only, so `javascript:`/`data:` can never become a clickable
+href), reinforced by a `DocumentRecord.canonical_url` validator that coerces non-http(s) to None.
+The UI renders only **secret-free** views (never `base_url`/`credential_ref`/internal hostnames, nor
+`alert.detail`). One consequence: the UI surfaces `source.name` (the operator-facing registry name),
+so **`source.name` must not contain internal endpoints or secrets** — keep it a human label, as the
+canonical source YAML intends. No auth by design (single-operator; bind to loopback / front with a VPN).
+
 ---
 
 ## 5. Sandboxed Parsing (Tika / Playwright)

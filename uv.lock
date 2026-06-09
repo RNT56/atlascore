@@ -176,6 +176,7 @@ search = [
 ]
 web = [
     { name = "fastapi" },
+    { name = "jinja2" },
     { name = "uvicorn" },
 ]
 
@@ -190,6 +191,7 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'api'", specifier = ">=0.3" },
     { name = "google-genai", marker = "extra == 'cloud'", specifier = ">=0.3" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "jinja2", marker = "extra == 'web'", specifier = ">=3.1" },
     { name = "mcp", specifier = ">=1.2" },
     { name = "meilisearch", marker = "extra == 'search'", specifier = ">=0.31" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ series_id }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="/macro">← All series</a></p>
+<h1>{{ series_id }}</h1>
+{% if series %}
+<p class="prov">
+  <span>provider <strong>{{ series.provider }}</strong></span> ·
+  <span>unit {{ series.unit or "—" }}</span> ·
+  <span>{{ series.points | length }} point(s){% if series.truncated %} (truncated){% endif %}</span>
+</p>
+
+<div class="sparkbox">{{ spark }}</div>
+
+<table>
+  <thead><tr><th>date</th><th>value</th></tr></thead>
+  <tbody>
+  {% for p in series.points | reverse %}
+    <tr><td>{{ p.ts | dt }}</td><td>{{ p.value if p.value is not none else "—" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No observations stored for <strong>{{ provider }}</strong> / <strong>{{ series_id }}</strong>.</p>
+{% endif %}
+{% endblock %}

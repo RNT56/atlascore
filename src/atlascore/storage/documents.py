@@ -28,7 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from atlascore.schemas.document import DocumentRecord
-from atlascore.storage.postgres.models import Document
+from atlascore.storage.postgres.models import Document, Source
 
 UpsertOutcome = Literal["created", "updated", "unchanged"]
 
@@ -98,3 +98,49 @@ def upsert_document(session: Session, record: DocumentRecord, *, now: datetime) 
     existing.schema_version = record.schema_version
     session.flush()
     return DocumentUpsert(existing.id, "updated", changed=True)
+
+
+@dataclass(frozen=True)
+class DocumentView:
+    """A single document for the WebUI detail page (sanitized body + provenance; no secrets)."""
+
+    document_id: UUID
+    source_name: str
+    source_slug: str | None
+    canonical_url: str | None
+    title: str | None
+    body_text: str | None
+    language: str | None
+    topics: list[str]
+    entity_ids: list[str]
+    published_at: datetime | None
+    ingested_at: datetime | None
+    parser_version: str
+    content_hash: str
+
+
+def get_document_view(session: Session, document_id: UUID) -> DocumentView | None:
+    """Return one document joined to its (non-secret) source identity, or None if absent."""
+    row = session.execute(
+        select(Document, Source.name, Source.config["slug"].astext)
+        .join(Source, Source.id == Document.source_id)
+        .where(Document.id == document_id)
+    ).first()
+    if row is None:
+        return None
+    doc, source_name, source_slug = row
+    return DocumentView(
+        document_id=doc.id,
+        source_name=source_name,
+        source_slug=source_slug,
+        canonical_url=doc.canonical_url,
+        title=doc.title,
+        body_text=doc.body_text,
+        language=doc.language,
+        topics=list(doc.topics or []),
+        entity_ids=list(doc.entity_ids or []),
+        published_at=doc.published_at,
+        ingested_at=doc.ingested_at,
+        parser_version=doc.parser_version,
+        content_hash=doc.content_hash,
+    )
