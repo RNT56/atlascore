@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.title if doc else "Not found" }}{% endblock %}
+{% block content %}
+{% if doc %}
+<article class="doc">
+  <h1>{{ doc.title or "(untitled)" }}</h1>
+  <dl class="meta">
+    <dt>source</dt><dd>{{ doc.source_slug or doc.source_name }}</dd>
+    <dt>published</dt><dd>{{ doc.published_at | dt }}</dd>
+    <dt>ingested</dt><dd>{{ doc.ingested_at | dt }}</dd>
+    {% if doc.language %}<dt>language</dt><dd>{{ doc.language }}</dd>{% endif %}
+    <dt>parser</dt><dd>{{ doc.parser_version }}</dd>
+    {% if doc.canonical_url %}
+    {% set u = doc.canonical_url | safe_url %}
+    <dt>url</dt><dd>{% if u %}<a href="{{ u }}" rel="noopener noreferrer nofollow" target="_blank">{{ doc.canonical_url }} ↗</a>{% else %}{{ doc.canonical_url }}{% endif %}</dd>
+    {% endif %}
+  </dl>
+
+  {% if doc.topics %}
+  <p class="tags">{% for t in doc.topics %}<span class="tag">{{ t }}</span>{% endfor %}</p>
+  {% endif %}
+
+  <h2>Body <small class="muted">(sanitized)</small></h2>
+  <div class="body">{{ doc.body_text or "(no body)" }}</div>
+
+  <p class="muted"><a href="/v1/search?q={{ (doc.title or '') | urlencode }}">JSON API</a> · document id <code>{{ doc.document_id }}</code></p>
+</article>
+{% else %}
+<h1>Document not found</h1>
+<p class="muted">No document with id <code>{{ document_id }}</code> (unknown or purged).</p>
+<p><a href="/search">← Back to search</a></p>
+{% endif %}
+{% endblock %}

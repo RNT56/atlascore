@@ -30,6 +30,21 @@ components, not new sources/services).
 
 ### Added
 
+- **V1 — server-rendered read-only WebUI** (`atlascore.api.web`, behind the `web` extra;
+  [ADR 0037](docs/decisions/0037-v1-server-rendered-read-only-webui.md)). A Jinja2 + plain-HTML
+  browser dashboard mounted on the existing `atlascore.api` app (UI at `/`, `/search`,
+  `/documents/{id}`, `/alerts`, `/sources`, `/macro`, `/macro/series`; JSON stays at `/v1/*`; static
+  at `/static`). **Zero JavaScript** (GET forms + full-page loads; the only "chart" is a server-rendered
+  inline SVG sparkline) — no npm/build, works offline, minimal attack surface. **Read-only** (§6/§13/§17):
+  reuses the same query functions as the CLI/MCP (`search_documents`/`get_document_view`/`list_alerts`/
+  `list_source_health`/`list_series`/`read_macro_series` — two small new read helpers: `get_document_view`,
+  `list_series`), never drives the control plane. Untrusted content is Jinja-autoescaped; search snippets
+  are escaped *before* their `«…»` markers become `<mark>`; outbound links are `rel=noopener/nofollow`;
+  no secrets (`base_url`/`credential_ref`) rendered. No auth (loopback/VPN). Run:
+  `uvicorn atlascore.api.app:app`. Unit tests (escaping/sparkline/no-DB render) + an integration test
+  rendering every page over a real DB (asserts XSS-escaped + no secret leak). Verified live (uvicorn +
+  real ingested Fed docs + ECB series).
+
 - **V1 — `atlas crawl requeue` (DLQ recovery CLI)** (freeze-compatible depth; useful during the
   unattended soak). Resets dead-letter (`status=dead`) jobs back to `pending` (attempt 0, cleared
   `claimed_*`/`last_error`/`finished_at`) — `atlas crawl requeue <job_id>` for one, or

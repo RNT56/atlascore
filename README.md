@@ -87,6 +87,14 @@ atlas backup                                 # nightly pg_dump + raw-dir sync
 atlas purge <doc_id|entity_id>               # audited erasure (incl. raw + full cascade)
 ```
 
+Optional read-only **WebUI + JSON API** (needs the `web` extra: `uv sync --extra web`):
+
+```bash
+uvicorn atlascore.api.app:app --host 127.0.0.1 --port 8000
+# Browser dashboard at http://127.0.0.1:8000/ (search, documents, alerts, source health, macro);
+# JSON API under /v1/*. Read-only, no auth — bind to loopback / front with a VPN if ever exposed.
+```
+
 Developer quality gates:
 
 ```bash

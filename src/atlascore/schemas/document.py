@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DocumentRecord(BaseModel):
@@ -39,3 +39,13 @@ class DocumentRecord(BaseModel):
     cluster_id: UUID | None = None
     parser_version: str
     schema_version: int = 1
+
+    @field_validator("canonical_url")
+    @classmethod
+    def _http_only_url(cls, value: str | None) -> str | None:
+        """Coerce a non-http(s) ``canonical_url`` to None (defense in depth: it becomes an href in
+        the WebUI, where ``javascript:``/``data:`` schemes are an XSS vector; the article parser
+        already strips these, this guards any other record producer)."""
+        if value is None:
+            return None
+        return value if value.strip().lower().startswith(("http://", "https://")) else None

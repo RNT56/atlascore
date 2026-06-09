@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<h1>Search documents</h1>
+
+<form class="filters" method="get" action="/search">
+  <input type="search" name="q" value="{{ q }}" placeholder="Full-text query (quoted phrases, or, -exclude)" autofocus>
+  <input type="text" name="source" value="{{ source }}" placeholder="source slug (optional)">
+  <label>since <input type="date" name="since" value="{{ since.date() if since else '' }}"></label>
+  <label>until <input type="date" name="until" value="{{ until.date() if until else '' }}"></label>
+  <button type="submit">Search</button>
+</form>
+
+{% if q %}
+  <p class="muted">{{ hits | length }} result(s) for “{{ q }}”{% if hits | length >= 50 %} (showing first 50){% endif %}</p>
+  {% for h in hits %}
+  <article class="hit">
+    <h3><a href="/documents/{{ h.document_id }}">{{ h.title or "(untitled)" }}</a></h3>
+    <p class="prov">
+      <span>{{ h.source_slug or h.source_name }}</span> ·
+      <span>{{ h.published_at | dt }}</span> ·
+      <span class="muted">rank {{ "%.3f"|format(h.rank) }}</span>
+      {% set u = h.canonical_url | safe_url %}{% if u %} · <a href="{{ u }}" rel="noopener noreferrer nofollow" target="_blank">source ↗</a>{% endif %}
+    </p>
+    <p class="snippet">{{ h.snippet | highlight }}</p>
+  </article>
+  {% else %}
+  <p class="muted">No matches.</p>
+  {% endfor %}
+{% else %}
+  <p class="muted">Enter a query to search the canonical document store.</p>
+{% endif %}
+{% endblock %}

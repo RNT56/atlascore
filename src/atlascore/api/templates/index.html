@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<section class="cards">
+  {% for status in health_order %}
+  <a class="card status-{{ status }}" href="/sources?status={{ status }}">
+    <span class="num">{{ counts.get(status, 0) }}</span>
+    <span class="lbl">{{ status }}</span>
+  </a>
+  {% endfor %}
+  <div class="card">
+    <span class="num">{{ doc_count }}</span>
+    <span class="lbl">documents</span>
+  </div>
+</section>
+
+<section class="split">
+  <div>
+    <h2>Sources needing attention</h2>
+    {% set problems = health | rejectattr("status", "equalto", "ok") | list %}
+    {% if problems %}
+    <table>
+      <thead><tr><th>status</th><th>source</th><th>lag</th><th>fails</th></tr></thead>
+      <tbody>
+      {% for r in problems %}
+        <tr>
+          <td><span class="status status-{{ r.status }}">{{ r.status }}</span></td>
+          <td>{{ r.source_slug or r.source_name }}</td>
+          <td>{{ r.freshness_lag | lag }}</td>
+          <td>{{ r.consecutive_failures }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">All sources OK.</p>{% endif %}
+    <p><a href="/sources">All sources →</a></p>
+  </div>
+
+  <div>
+    <h2>Recent alerts</h2>
+    {% if recent_alerts %}
+    <ul class="alerts">
+      {% for a in recent_alerts %}
+      <li>
+        <span class="sev sev-{{ a.severity }}">{{ a.severity }}</span>
+        <span class="atype">{{ a.alert_type }}</span>
+        <span class="atitle">{{ a.title }}</span>
+        <span class="muted">{{ a.created_at | dt }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No alerts.</p>{% endif %}
+    <p><a href="/alerts">All alerts →</a></p>
+  </div>
+</section>
+{% endblock %}
