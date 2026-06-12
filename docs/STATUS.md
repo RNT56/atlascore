@@ -2,13 +2,13 @@
 
 > **This is the shared coordination board for every session (human or AI) and every worker.**
 > Read [`../CLAUDE.md`](../CLAUDE.md) and this file before starting. Update it at session close.
-> Last updated: **2026-06-05**.
+> Last updated: **2026-06-12**.
 
 ---
 
 ## Current phase
 
-**Post-MVP cycle B16–B22 — DONE (2026-06-05). MVP (B1–B15) complete. Scope frozen (CLAUDE.md §5); the next step is operational — deploy + a month-long unattended soak.**
+**MVP (B1–B15) and post-MVP cycle B16–B22 are complete. `main` also contains the first v1 parallel-track increments through ADR 0037. The soak boundary remains operational: run the month-long unattended soak from a separate pinned clone, with scheduler + worker deployed and real alerting/heartbeat/backups configured.**
 
 The post-MVP upgrade cycle **B16–B22** added depth on existing components (not new sources/services, so
 the §5 freeze is respected): audit_log rotation + crawl_job prune (B16), `time_series_point` yearly
@@ -387,7 +387,7 @@ components, NOT a new source/service ([ADR 0034](decisions/0034-soak-readiness-h
   backup/digest unit+timer files (+ README). Runbook §2.3/§6C use `atlas scheduler run`/`atlas worker
   run` (no more crash-looping `apps.*`); backup timer → `infra/backup.sh` (offsite); stale
   `atlas jobs *`/`atlas restore verify`/`atlas enrich backfill` references replaced with the real
-  commands (`atlas crawl dlq`, `infra/restore_drill.sh`, `atlas reindex-embeddings`) + break-glass SQL.
+  commands (`atlas crawl dlq`, `infra/restore_drill.sh`, `atlas reindex-embeddings`) + recovery guidance.
 - **Compose `make dev` fixes (found by actually booting the stack + running the full day-1 path).**
   (a) `infra/docker-compose.yml` used a hard `${MEILI_MASTER_KEY:?…}` on the off-by-default Meilisearch
   service; Compose interpolates it **before** profile filtering, so `make dev` errored for anyone not
@@ -444,13 +444,13 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
   papers ingested + searchable). Keyless. Second v1 increment.
 - ✅ **GitHub releases connector** (`connectors/github`, `sources/github_ruff_releases.yaml`) —
   `/repos/{owner}/{repo}/releases` → documents; optional `GITHUB_TOKEN` (Bearer header) for the higher
-  rate tier. Verified live (30 ruff releases ingested + searchable). Third v1 increment. (Advisories =
-  documented follow-up.)
+  rate tier. Verified live (30 ruff releases ingested + searchable). Third v1 increment; GitHub
+  advisories shipped as a later v1 follow-up below.
 - ✅ **read-only FastAPI dashboard** (`atlascore.api`, `web` extra; [ADR 0035](decisions/0035-v1-read-only-fastapi-dashboard.md))
   — `/healthz` + `/v1/search`/`/v1/alerts`/`/v1/sources/health` reusing the storage query fns; capped,
   secret-free, no-auth (loopback/VPN). Verified live (all three endpoints over a real DB). Fourth v1
-  increment. **All four requested v1 increments are now built and merged to `main`** (none enabled in
-  the pinned soak clone).
+  increment. The original requested v1 increments and later follow-ups are now built and merged to
+  `main` (none enabled in the pinned soak clone).
 - ✅ **GitHub Advisory Database (GHSA) connector** (`connectors/github/advisories.py`,
   `sources/github_advisories_high.yaml`) — global `/advisories` → security-advisory documents
   (severity/CVE-marked, like NVD). Verified live (50 high-severity advisories). Fifth v1 increment
@@ -495,9 +495,8 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
 The **embedding-spend ledger**, the **dead-man's-switch**, and the **deploy-glue/runbook** follow-ups
 are now DONE (see the Done section above; [ADR 0034](decisions/0034-soak-readiness-hardening.md)).
 Remaining candidate *depth* follow-ups (NOT new sources/services), only if a concrete need appears:
-an `atlas crawl requeue` CLI (replace the break-glass requeue SQL), an `atlas summarize` pre-warm CLI,
-per-filing second-fetch wiring of B22 extraction into the worker loop, a periodic restore-drill timer,
-and a `source_health` history table. None are started.
+an `atlas summarize` pre-warm CLI, per-filing second-fetch wiring of B22 extraction into the worker
+loop, a periodic restore-drill timer, and a `source_health` history table. None are started.
 
 ---
 
@@ -564,33 +563,24 @@ and a `source_health` history table. None are started.
 - **No `atlas summarize` CLI in MVP.** Summaries are produced via `get_document_summary`
   (`allow_compute=true` warms the cache); there is no control-plane summary command (not in
   CLAUDE.md §9). A pre-warm CLI is a possible later convenience.
-- **B11 enrichment backends are deterministic baselines (by design; ADR 0021).** The `local`
-  embedding backend is a **hashing vectorizer** (lexical overlap, not semantics) — a real ANN
-  ranking needs the pluggable sentence-transformers/cloud backend wired (a localized change; same
-  dim → no reindex). NER is **rule-based** (ticker/CIK + capitalized phrases), precision-over-recall:
-  it drops single-word generic proper nouns, and corporate-suffix heuristics can misclassify ("Bank
-  of England" → `company` via the `bank` suffix). `spacy`/`sentence-transformers` are declared
-  optional extras but **not installed/wired** in MVP (`EMBEDDING_BACKEND=openai|google` raises a
-  clear `ConfigError`). Language detection is the parser value + a tiny stopword heuristic, else
+- **Default enrichment remains deterministic unless a real backend is configured.** The `local`
+  embedding backend is a **hashing vectorizer** (lexical overlap, not semantics), and the default NER
+  backend is **rule-based** (ticker/CIK + capitalized phrases), precision-over-recall: it drops
+  single-word generic proper nouns, and corporate-suffix heuristics can misclassify ("Bank of England"
+  → `company` via the `bank` suffix). B21 wired `sentence-transformers`, OpenAI/Google embeddings,
+  hosted summaries, and spaCy NER behind optional extras/import guards; using them requires the
+  corresponding extra/model/API key and, for a dimension change, the documented `atlas
+  reindex-embeddings` path. Language detection is the parser value + a tiny stopword heuristic, else
   honest `None`. `mention.sentiment` is always `null` (never fabricated). Entity **merging** is
-  resolvable (`merged_into` is followed) but no merge **operation** exists yet — `merged_into` is
-  null in practice.
-- **B11 enrich runs via the queue OR `atlas enrich`, but no scheduler drives it yet.** The parse
-  worker enqueues an idempotent `enrich` job per changed document; a worker must run `run_one_enrich`
-  (or `atlas enrich <doc_id>` one-shot) to process it. The timed worker loop lands with the scheduler
-  block. The `enrich` job's `dedupe_key` folds in `content_hash`, so an unchanged re-parse never
-  re-enqueues and a changed body re-enriches (last-write-wins).
-- **CI jobs that depend on later blocks are expected to be red until then**, by design: the
-  `source-yaml` job calls `atlas source validate --all` (lands in **B2**), and `make seed` / the
-  smoke target exercise ingestion (B2+). B1-owned jobs (lint-format, typecheck, test, migrations,
-  secrets-scan, audit) and the `integration` job are green.
+  resolvable (`merged_into` is followed) but no merge **operation** exists yet — `merged_into` is null
+  in practice.
 - **Local `make dev`/`make migrate` need Docker** (Postgres 16 + pgvector). Docker Desktop's
   first-boot on macOS can take a few minutes; the verification used a throwaway PG16 container.
 - `make test` runs the integration tests only when a database is reachable (they skip otherwise);
   run `make dev && make migrate` first, or `make test-integration`, to exercise them locally.
 - **`atlas crawl enqueue` is not idempotent across reruns** — the manual dedupe_key is timestamped
   (`fetch:<slug>:manual:<iso>`), so each invocation enqueues a fresh job (intended for a one-shot).
-  The scheduler's per-tick dedupe_keys (B-later) are stable.
+  The B19 scheduler's per-tick dedupe_keys are stable.
 - **SSRF connection-pinning still deferred** (ADR 0014) — the guard validates all resolved IPs and
   re-validates every redirect hop, but the socket is not pinned to the validated IP, so a sub-second
   DNS-rebinding TOCTOU window remains. Accepted for a single-operator box; harden before any exposed
@@ -618,18 +608,16 @@ and a `source_health` history table. None are started.
 - **MCP server connects to the DB lazily (B7)** — `atlas mcp dev` starts the stdio server before
   reaching Postgres; the engine is created on the first tool call, so a DB outage surfaces as a tool
   error (`ToolError` to the client), not a startup failure. Intended for a single-operator box.
-- **`atlas health` / `atlas digest` recompute `source_health` on each run (B8)** — there is no
-  scheduler yet, so the CLI drives the freshness computation (compute → read) instead of only
-  reading a job-populated table. Cheap at single-operator scale; when the scheduler block lands it
-  runs the timed `job_type=freshness` job and the CLI can become a pure read. Documented in ADR 0018.
-- **`source_health.duplicate_rate` is null in MVP (B8)** — per-item dedupe outcomes aren't recorded
-  yet, so the column is honestly null rather than fabricated; populated when B13 adds the metric.
+- **`atlas health` / `atlas digest` still recompute `source_health` on demand.** The B19 scheduler also
+  refreshes `source_health` on cadence, but the operator CLI keeps its refresh-first behavior so a
+  manual health/digest run is current even if the scheduler has been down. Cheap at single-operator
+  scale; pass `atlas health --no-refresh` when a pure read is desired.
+- **`source_health.duplicate_rate` is null today** — per-item dedupe outcomes are not recorded yet, so
+  the column is honestly null rather than fabricated. A `source_health` history/dedupe metric is a
+  possible later depth follow-up.
 - **Digest delivery — RESOLVED in B13.** `atlas digest` now emits over the configured delivery
   channel (`ALERT_WEBHOOK_URL`/`NTFY_TOPIC`/SMTP, else stdout/log) and is still echoed locally; the
   freshness **alert** rule is also wired (B13). (Originally a B8 stdout-only seam.)
-- **Scheduler-liveness half of the digest is a placeholder (B8)** — only fetch-worker presence is
-  checked (via `pg_locks` on the fetch advisory lock); the single-scheduler liveness check lands
-  with the scheduler block.
 - **`time_series_point` yearly partitions — RESOLVED in B17.** Migration `0010` carves yearly
   `time_series_point_<year>` partitions (DEFAULT retained as catch-all); `atlas tsp partitions
   ensure` / `worker.partitions.run_partition_maintenance` (the B19 scheduler's monthly job) keep the

@@ -19,9 +19,8 @@ Posture enforced here:
   and agents must treat it that way (CLAUDE.md §15).
 
 Deviations from the illustrative spec sketch (docs/mcp §2.1), recorded in ADR 0017: source
-filtering is a single `source` slug (matching `atlas search`) rather than `source_ids[]`, and the
-`topics`/`entity_ids` filters are deferred until enrichment populates those columns (B11). The
-hits already carry `topics`/`entity_ids` (empty until B11) for forward compatibility.
+filtering is a single `source` slug (matching `atlas search`) rather than `source_ids[]`. B11 later
+wired the `topics`/`entity_ids` filters once enrichment populated those columns.
 """
 
 from __future__ import annotations

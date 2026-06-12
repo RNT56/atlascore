@@ -388,6 +388,9 @@ components, not new sources/services).
 
 ### Changed
 
+- **Documentation current-state cleanup:** README and `docs/STATUS.md` now reflect ADRs through 0037,
+  the v1 increments already merged to `main`, the separate pinned-soak boundary, and the B19/B21
+  behavior that replaced older "no scheduler yet" / "real backends not wired" notes.
 - **Packaging layout finalized (ADR 0012):** a single **`src/atlascore`** import root replaces the
   empty top-level `apps/` and `packages/` placeholders; the `packages` (libraries) vs `apps`
   (runnable roles) distinction is preserved as subpackage names. `pyproject.toml` hatchling/ruff/

@@ -162,17 +162,17 @@ Rule: do not add top-level directories without a clear reason.
 - **[`docs/compliance/README.md`](docs/compliance/README.md)** — internal-only posture, honest PII framing, retention classes.
 - **[`docs/mcp/README.md`](docs/mcp/README.md)** — the 7 read-oriented MCP tools.
 - **[`docs/runbooks/README.md`](docs/runbooks/README.md)** — backups/restore, purge, backfill/reindex, secrets at deploy.
-- **[`docs/decisions/`](docs/decisions/)** — ADRs (`0000-template.md`, `0001`–`0025`, plus `README.md` index).
+- **[`docs/decisions/`](docs/decisions/)** — ADRs (`0000-template.md`, `0001`–`0037`, plus `README.md` index).
 
 ---
 
 ## Current status
 
-**MVP (B1–B15) done, and the post-MVP cycle (B16–B22) done.** See [`docs/STATUS.md`](docs/STATUS.md) for the live board and [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md) §MVP for the backlog.
+**MVP (B1–B15) done, and the post-MVP cycle (B16–B22) done.** Since then, `main` has also picked up the first v1 increments: ECB/arXiv/GitHub/Eurostat connectors, optional SOPS/age deploy secrets, DLQ requeue, and the read-only JSON API + server-rendered WebUI. See [`docs/STATUS.md`](docs/STATUS.md) for the live board and [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md) §MVP for the original backlog.
 
 The full pipeline works end to end and unattended: an approved source is fetched (SSRF-guarded, conditional), the raw payload is captured immutably, parsed into a canonical `document`, enriched (language → NER → topics → embeddings), indexed for full-text search, summarized (cached + cited), and watched by rule-based alerts — all behind a read-only MCP surface and a `atlas` control-plane CLI, with nightly backups and an audited `atlas purge` erasure path. `make smoke` runs the whole chain; `make security` runs the hardening regressions.
 
-The MCP surface ships the **full 7 read tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`, and `get_raw_document` (sanitized by default; raw HTML only behind its gated, audited `include_raw_html` flag). The **post-MVP cycle (B16–B22)** then added depth on existing components (not new sources/services): audit_log rotation + crawl_job prune, `time_series_point` yearly partitions, alert watchlist gating + lifecycle CLI, the single-instance scheduler + continuous worker loop, connector depth (custom headers + NVD keyed tier + incremental checkpoint), real embedding/LLM backends + a hard spend cap + spaCy NER + `atlas reindex-embeddings`, and SEC full-filing extraction via sandboxed Tika. **Scope is now frozen (CLAUDE.md §5)** until the current set runs unattended for a month — the next step is operational (deploy the scheduler + worker), not another feature block.
+The MCP surface ships the **full 7 read tools**: `search_documents`, `get_macro_series`, `get_entity_mentions`, `get_document_summary`, `get_source_health`, `get_alerts`, and `get_raw_document` (sanitized by default; raw HTML only behind its gated, audited `include_raw_html` flag). The **post-MVP cycle (B16–B22)** added depth on existing components (not new sources/services): audit_log rotation + crawl_job prune, `time_series_point` yearly partitions, alert watchlist gating + lifecycle CLI, the single-instance scheduler + continuous worker loop, connector depth (custom headers + NVD keyed tier + incremental checkpoint), real embedding/LLM backends + a hard spend cap + spaCy NER + `atlas reindex-embeddings`, and SEC full-filing extraction via sandboxed Tika. The live-board plan keeps the unattended soak isolated in a pinned clone while v1 work lands on `main`; the next operational step is still to configure the box and run the soak.
 
 ---
 
