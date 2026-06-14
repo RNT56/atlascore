@@ -388,9 +388,9 @@ components, not new sources/services).
 
 ### Changed
 
-- **README problem statement:** added a pain-points / why-it-matters / how-AtlasCore-solves-it
-  section covering governance, provenance, raw evidence, operations, alerts, LLM cost/egress,
-  erasure/backups, secrets, and the read-only dashboard boundary.
+- **README redesign:** rebuilt the README around a stronger landing-page flow with a centered hero,
+  status badges, a sharper promise, a pain-points / why-it-matters / AtlasCore-answer matrix, cleaner
+  architecture and capability tables, and more scannable operator/setup sections.
 - **Documentation current-state cleanup:** README and `docs/STATUS.md` now reflect ADRs through 0037,
   the v1 increments already merged to `main`, the separate pinned-soak boundary, and the B19/B21
   behavior that replaced older "no scheduler yet" / "real backends not wired" notes.
