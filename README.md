@@ -39,6 +39,31 @@ Components:
 
 ---
 
+## Pain points AtlasCore solves
+
+AtlasCore is built around a narrow set of operator pain points. The table below is the problem
+statement the architecture is optimized around: why each problem matters, and how the system solves
+it without growing into a SaaS platform or crawler.
+
+| Pain point | Why it matters | How AtlasCore solves it |
+|---|---|---|
+| Useful public information is scattered across feeds and official APIs. | Manually checking central banks, filings, CVEs, releases, papers, and advisory feeds does not scale, and missed updates are easy. | A Git-tracked source registry drives scheduled RSS/API connectors for approved sources only. The scheduler enqueues fetch jobs; workers ingest, parse, enrich, index, and alert unattended. |
+| Ad hoc web fetching by agents is unsafe and hard to govern. | Letting agents browse freely mixes instructions with evidence, risks SSRF/prompt-injection, and makes source-policy enforcement fuzzy. | Agents get a read-only MCP surface over processed stores. Fetching and policy changes stay in the CLI/control plane; every outbound source is pre-approved and SSRF-guarded. |
+| Search results need provenance, not just snippets. | For research and operational decisions, a result without source, URL, parser version, timestamps, and evidence IDs is not auditable. | Every normalized document links back to source, crawl job, immutable raw payload, parser version, schema version, and timestamps. MCP/CLI/API results carry provenance by default. |
+| Raw evidence disappears or changes upstream. | Feeds roll over, filings are amended, pages change, and parsers improve; without the original bytes, reproducing a claim is impossible. | Raw payloads are stored first in a gzipped, content-addressed raw store. Parsed documents are current-state rows, but re-parsing is reproducible from immutable raw and pinned parser versions. |
+| Personal research data still needs compliance discipline. | Public data can include personal data, licensing constraints, and attribution obligations; publishing harvested data would cross the wrong boundary. | The project is internal-only, code-not-data. Sources carry policy metadata, attribution is retained, default-deny blocks unknown/prohibited sources, and harvested data/credentials stay out of the repo. |
+| A full data-platform stack is overkill for one operator. | Kafka, external search clusters, vector DBs, Kubernetes, and multi-tenant auth add cost and failure modes before they add value. | One PostgreSQL 16 instance handles relational data, full-text search, pgvector, queues, and time-series partitions; raw blobs live on local disk; deployment is single-box. |
+| Ingestion jobs must survive crashes and retries. | A single bad feed item or transient API failure should not stop the pipeline or create duplicates. | The Postgres-backed `crawl_job` queue uses deterministic dedupe keys, retry/backoff, stale-claim reclaim, `FOR UPDATE SKIP LOCKED`, and a DLQ that can be inspected and requeued. |
+| Unattended systems fail silently. | If the box, scheduler, worker, source, alert delivery, or backup path breaks, silence is itself a failure mode. | `source_health`, `atlas health`, daily digest delivery, scheduler/worker liveness checks, optional heartbeat pings, and runbooks make failure visible during the soak. |
+| Alerts should be actionable, not just noisy matches. | A system that fires on every filing, CVE, or freshness change quickly becomes another inbox to ignore. | Rules dedupe on stable keys, include evidence document IDs, honor a watchlist for CVEs/filings, support lifecycle commands, and share the same delivery channel as digests. |
+| LLMs and embeddings can leak data or run up cost. | Document text may contain personal data, and hosted summarization/embedding calls need hard cost and egress boundaries. | Deterministic offline defaults keep CI/dev safe; hosted backends are optional, import-guarded, provenance-recorded, and gated by a monthly spend ledger/cap. |
+| Retrieval needs more than one shape of data. | Articles, filings, CVEs, advisories, macro series, entities, summaries, and alerts have different query patterns. | The normalized store separates documents, time-series points, entities/mentions, summaries, alerts, source health, and audit logs while exposing coherent CLI/MCP/API read paths. |
+| Erasure, retention, and backups cannot be afterthoughts. | Internal-only does not remove the need to delete sensitive records, retain purge proof, or restore after disk/DB failure. | `atlas purge` performs an audited cascade, routine audit/job retention is rotated, `atlas backup`/infra scripts cover DB + raw store, and restore drills are documented. |
+| Credentials and operator secrets are easy to leak. | API keys in YAML, logs, DB rows, dumps, or audit details become long-lived incidents. | Source YAML stores only credential references; runtime settings use secret types; storage/log sinks pass through redaction helpers; optional SOPS/age deploy secrets keep keys outside the repo. |
+| A dashboard is useful, but write surfaces are risky. | A browser UI can accidentally become an admin panel, broadening the attack surface and bypassing the CLI control plane. | The optional FastAPI/WebUI is read-only, loopback/VPN-oriented, capped, autoescaped, and secret-free; ingestion management remains CLI-only. |
+
+---
+
 ## The three decisions that shape everything
 
 1. **Internal-only** — never redistribute data. Personal-research posture; always keep attribution.
