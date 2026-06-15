@@ -393,6 +393,11 @@ Read-oriented, over stdio, provenance on every result, result-size caps, strict 
 
 ## 15. Roadmap
 
+> **Current-state note (2026-06-15):** this section remains the point-in-time roadmap from the
+> original plan. The living state board is `docs/STATUS.md`; as of the current board, the MVP,
+> B16-B22, and the first v1 increments are already merged, while Prometheus/Grafana and further
+> source expansion remain need-gated.
+
 ### 15.1 MVP (B1–B15)
 
 The fifteen blocks above: a governed pipeline from source → ingest → search → MCP summary → alert, running unattended on one box with backups and a working purge path. All 7 MCP tools. FRED + SEC EDGAR + NVD + RSS sources.
@@ -403,7 +408,8 @@ The fifteen blocks above: a governed pipeline from source → ingest → search 
 - **More sources:** GitHub (releases/advisories) and arXiv connectors.
 - **Optional read-only FastAPI** dashboard surface (`apps/api/`) — only if a dashboard is wanted; validate inputs/outputs, paginate, typed errors with request IDs, no stack traces to callers.
 - **Observability:** optional Prometheus/Grafana if the daily digest proves insufficient.
-- **Secrets:** optionally adopt SOPS/age per ADR-0011's deferred plan.
+- **Secrets:** optionally adopt SOPS/age per ADR-0011's deferred plan. **Current note:** the
+  optional SOPS/age path was later wired in ADR 0036; using it remains an operator deploy choice.
 
 ### 15.3 v2 (only with a documented, present need)
 

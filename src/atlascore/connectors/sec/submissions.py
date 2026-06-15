@@ -6,15 +6,14 @@ GUID, the primary-document URL = link, form + company = title, a short descripti
 shared `ArticleParser` then produces the sanitized `document` body, so filings are searchable via
 ``search_documents``.
 
-**Full-filing extraction (B22, opt-in).** When the source sets ``fetch.params.extract_filings:
-'true'`` AND a sandboxed Tika is available (``TIKA_MODE``), :meth:`extract_filing` fetches a filing's
-primary document (PDF/HTML) through the same SSRF-guarded fetcher and runs it through the sandboxed
-:class:`FilingParser` to produce a full-text body. When Tika is absent or the flag is off it returns
-``None`` and the connector falls back to the metadata-only body (exact B10 behaviour) — so CI and the
-sandbox stay green without Java.
+**Full-filing extraction foundation (B22, opt-in).** :meth:`extract_filing` can fetch a filing's
+primary document (PDF/HTML) through the same SSRF-guarded fetcher and run it through the sandboxed
+:class:`FilingParser` when ``fetch.params.extract_filings: 'true'`` and Tika are configured. It
+returns ``None`` when opt-out/Tika-absent/extraction failure should fall back to the metadata-only
+body. The default worker parse path remains metadata-only until a caller wires this second fetch.
 
 SEC requires a descriptive **User-Agent with a contact** (sent as ``DEFAULT_USER_AGENT``) and a
-**10 req/s** limit (the source's `rate_limit`, enforced by the single fetch worker). No API key.
+**10 req/s** limit (the source's ``rate_limit``, enforced by the single fetch worker). No API key.
 """
 
 from __future__ import annotations

@@ -2,9 +2,10 @@
 #
 # Policy note (operator): the National Vulnerability Database is a public US
 # government service; CVE data is public, so it is marked `approved` for internal
-# research. B10 runs the KEYLESS tier (~5 req / 30 s) — configured conservatively
-# below. NVD asks clients to sleep between requests and pull incrementally. The
-# keyed tier (higher limit, `apiKey` header) is a documented later enhancement.
+# research. This source intentionally runs the KEYLESS tier (~5 req / 30 s) —
+# configured conservatively below. NVD asks clients to sleep between requests and
+# pull incrementally; B20 added the runtime checkpoint cursor for that. To use the
+# higher-rate keyed tier, enable `sources/nvd_recent_cves_keyed.yaml` instead.
 
 id: nvd_recent_cves
 name: NVD — recent CVEs
@@ -20,7 +21,7 @@ policy:
 rate_limit: { max_requests: 5, window_seconds: 30 }
 freshness: { target: "24h", warn_after: "48h", error_after: "96h" }
 retention: { raw: "2y", normalized: "permanent" }
-credentials: { ref: null }   # keyless tier; NVD_API_KEY (header) is a later enhancement
+credentials: { ref: null }   # keyless tier; use nvd_recent_cves_keyed.yaml for NVD_API_KEY
 fetch:
   connector: atlascore.connectors.nvd.cves:NvdCveConnector
   schedule: "0 * * * *"

@@ -484,8 +484,8 @@ wires.
   - **A descriptive `User-Agent` with contact info is required.** SEC may block
     requests without one. AtlasCore sends `DEFAULT_USER_AGENT` (transparent project
     UA + contact email). Never send a deceptive or rotating UA.
-- **Conditional requests:** ETag / Last-Modified on the JSON endpoints; cursor over
-  the daily index by date.
+- **Incremental progress:** ETag / Last-Modified on fetch responses, plus the B20
+  `source.checkpoint` cursor over newest filing date/accession.
 - **Output:** `document` rows via the **filing parser** (filing index → filing
   documents); Company Facts financial concepts may also land as
   `time_series_point` rows where they're genuine series. Dedupe on accession number
@@ -494,7 +494,7 @@ wires.
   limits) when filings are ingested as files.
 - **MVP role:** B10 (basic filings searchable); powers the `sec_filing` alert (B13).
 
-> **Implemented (B10) — `atlascore.connectors.sec.submissions.SecSubmissionsConnector`** ([ADR 0020](../decisions/0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md)). `output_kind=document`. Fetches `/submissions/CIK##########.json` for `fetch.params.cik` (zero-padded); each recent filing → a searchable `document` via the shared B5 pipeline (accession = GUID, the primary-doc URL on `www.sec.gov` = canonical URL, `form — company` = title, a `"<desc> (form <F>) filed by <co> on <date>"` body). Sends the required contact `User-Agent` (`DEFAULT_USER_AGENT`) + 10 req/s; no key. **"Basic":** a per-filing metadata document, not full filing-text extraction (sandboxed Tika is a later follow-up). No conditional requests yet (idempotent re-fetch by GUID + content hash).
+> **Implemented (B10/B20/B22) — `atlascore.connectors.sec.submissions.SecSubmissionsConnector`** ([ADR 0020](../decisions/0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md), [ADR 0031](../decisions/0031-b20-connector-depth-headers-keyed-nvd-checkpoint.md), [ADR 0033](../decisions/0033-b22-sec-full-filing-sandboxed-tika.md)). `output_kind=document`. Fetches `/submissions/CIK##########.json` for `fetch.params.cik` (zero-padded); each recent filing becomes a searchable metadata document via the shared B5 pipeline (accession = GUID, the primary-doc URL on `www.sec.gov` = canonical URL, `form — company` = title, short filing description = body). Sends the required contact `User-Agent` (`DEFAULT_USER_AGENT`) + 10 req/s; no key. B20 added runtime checkpointing so old filings are filtered after a successful fetch. B22 added the sandboxed Tika/FilingParser foundation and `extract_filing(...)`, which can fetch a primary PDF/HTML filing through the same SSRF-guarded fetcher and return full text when `fetch.params.extract_filings: 'true'` and `TIKA_MODE` are configured. The remaining candidate follow-up is wiring that per-filing second fetch into the worker parse path when full-filing search is needed; default CI/soak behavior remains metadata-only.
 
 ### 7.4 NVD (National Vulnerability Database) — `packages/connectors/nvd`
 
@@ -516,7 +516,7 @@ wires.
 - **MVP role:** B10 (CVEs searchable); powers the `cve_watch` alert (B13, NVD +
   vendor RSS).
 
-> **Implemented (B10) — `atlascore.connectors.nvd.cves.NvdCveConnector`** ([ADR 0020](../decisions/0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md)). `output_kind=document`. Fetches the CVE 2.0 JSON API; each vulnerability → a searchable `document` (CVE id = GUID, the NVD detail URL = canonical URL, the **English** description = body). Optional `fetch.params.keyword` (`keywordSearch`) / `results_per_page`. **B10 runs the keyless tier** (`rate_limit: {5, 30}`); the keyed `apiKey`-**header** tier needs custom-header support in `SafeFetcher` and is a documented follow-up. No conditional/`lastMod` cursor yet (idempotent re-fetch by CVE id + content hash).
+> **Implemented (B10/B20) — `atlascore.connectors.nvd.cves.NvdCveConnector`** ([ADR 0020](../decisions/0020-b10-sec-nvd-document-connectors-and-output-kind-dispatch.md), [ADR 0031](../decisions/0031-b20-connector-depth-headers-keyed-nvd-checkpoint.md)). `output_kind=document`. Fetches the CVE 2.0 JSON API; each vulnerability becomes a searchable `document` (CVE id = GUID, the NVD detail URL = canonical URL, the **English** description plus a parser-safe CVSS marker = body). Optional `fetch.params.keyword` (`keywordSearch`) / `results_per_page`. The keyless source stays conservative (`rate_limit: {5, 30}`); the B20 keyed sibling source sends `credential_ref: NVD_API_KEY` as the `apiKey` **header** through `SafeFetcher.extra_headers` for the higher-rate tier. B20 also added the runtime `source.checkpoint` cursor for `lastModStartDate` / `lastModEndDate` incremental windows. Re-fetch remains idempotent by CVE id + content hash.
 
 ### 7.5 GitHub — `packages/connectors/github`
 

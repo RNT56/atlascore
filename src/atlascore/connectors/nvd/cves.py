@@ -5,9 +5,10 @@ GUID, the NVD detail URL = link, the English description = body) so CVEs are sea
 ``search_documents`` (B10). Optional ``params``: ``keyword`` (``keywordSearch``) and
 ``results_per_page`` (``resultsPerPage``).
 
-**Keyless tier (B10):** NVD allows ~5 requests / 30 s without a key; the source's `rate_limit`
-reflects that. The keyed tier sends the key as an ``apiKey`` **header** for a higher limit — that
-needs custom-header support in the fetcher and is a documented follow-up; B10 runs keyless.
+**NVD tiers:** the keyless source runs conservatively at ~5 requests / 30 s. B20 also ships the
+keyed tier: when ``ctx.credential`` is set (usually ``credential_ref: NVD_API_KEY``), the connector
+sends it as the ``apiKey`` **header** for the higher-rate tier. B20 also adds the runtime
+``source.checkpoint`` cursor for ``lastModStartDate`` / ``lastModEndDate`` incremental windows.
 """
 
 from __future__ import annotations

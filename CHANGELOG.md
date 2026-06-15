@@ -30,6 +30,12 @@ components, not new sources/services).
 
 ### Added
 
+- **Docs — current roadmap/status reconciliation.** Refreshed the living status/runbook dates,
+  clarified that B20 NVD keyed/incremental fetching and B22 SEC full-filing extraction foundations
+  are shipped, and corrected stale "later follow-up" wording in connector/source docs. The remaining
+  SEC follow-up is specifically the worker-path second fetch for searchable full-filing text when
+  needed.
+
 - **V1 — server-rendered read-only WebUI** (`atlascore.api.web`, behind the `web` extra;
   [ADR 0037](docs/decisions/0037-v1-server-rendered-read-only-webui.md)). A Jinja2 + plain-HTML
   browser dashboard mounted on the existing `atlascore.api` app (UI at `/`, `/search`,
@@ -95,7 +101,7 @@ components, not new sources/services).
   (`credentials.ref`) is sent as an `Authorization: Bearer` header for the ~5,000/hour tier (unauth
   ~60/hour when unset; redacted by `sanitize_for_storage`). `sources/github_ruff_releases.yaml` +
   golden/contract tests + `GITHUB_TOKEN` in `.env.example`. **Verified live:** a 30-release crawl
-  ingested 30 searchable documents. Security advisories are a documented follow-up; v1 ships releases.
+  ingested 30 searchable documents. Security advisories shipped later in the v1 GHSA connector below.
 
 - **V1 — arXiv connector** (second v1 increment; parallel-track, not in the soak). `ArxivConnector`
   **subclasses `RssConnector`** — the arXiv export API (`/api/query`) returns Atom, so feedparser
@@ -148,10 +154,12 @@ components, not new sources/services).
     `none` default. All heavy imports are lazy so it imports with no Java (`tika_available` → False).
   - `atlascore.parsers.filing.FilingParser` (`filing@1.0.0`): Tika text → control-char/whitespace
     cleaned `ParsedFiling` (Tika client dependency-injected for tests).
-  - `SecSubmissionsConnector.extract_filing(...)`: opt-in via `fetch.params.extract_filings: 'true'`
-    + `tika_available()`; fetches the primary filing doc through the same SSRF-guarded fetcher (PDF/HTML
-    MIME allowlist) and extracts full text, else returns `None` and falls back to the B10 metadata
-    body (a bad filing never fails the crawl; CI/sandbox stay green without Java). New `TIKA_*` settings.
+  - `SecSubmissionsConnector.extract_filing(...)`: opt-in helper via `fetch.params.extract_filings:
+    'true'` + `tika_available()`; fetches the primary filing doc through the same SSRF-guarded fetcher
+    (PDF/HTML MIME allowlist) and extracts full text, else returns `None` so callers fall back to the
+    B10 metadata body (a bad filing never fails the crawl; CI/sandbox stay green without Java). The
+    default soak/CI parse path remains metadata-only until that per-filing second fetch is wired.
+    New `TIKA_*` settings.
 
 - **B21 — real embedding/LLM backends + hard spend cap + spaCy NER + reindex** ([ADR 0032](docs/decisions/0032-b21-real-backends-spend-cap-spacy-reindex.md)).
   - Embeddings: `EMBEDDING_BACKEND=sentence-transformers` (real local, import-guarded) and

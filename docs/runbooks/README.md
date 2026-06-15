@@ -6,7 +6,7 @@
 > CLI and `make` targets, never by the MCP server. The ingestion/control plane must never
 > depend on MCP, and agents never trigger crawls or change policy.
 >
-> **Last reviewed:** 2026-06-03
+> **Last reviewed:** 2026-06-15
 >
 > **Authority:** This document conforms to the AtlasCore Canonical Decisions Spec v1. Where
 > any procedure here appears to disagree with table names, columns, env vars, the B1–B15 MVP
@@ -102,6 +102,11 @@ resolved at runtime; it is never a secret value.
 
 **Goal:** Bring up the whole single-box stack and pin process roles so that exactly one
 scheduler and exactly one fetch worker run.
+
+> **Current soak note:** the pre-Hetzner unattended soak can run on macOS via the
+> vetted launchd agents in [`infra/launchd/`](../../infra/launchd/). The same invariants
+> apply: one scheduler, one fetch worker, real delivery, heartbeat, backup, and restore drill.
+> Use this systemd section for the eventual Linux/Hetzner deployment.
 
 ### 2.1 Topology
 

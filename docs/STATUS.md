@@ -2,7 +2,7 @@
 
 > **This is the shared coordination board for every session (human or AI) and every worker.**
 > Read [`../CLAUDE.md`](../CLAUDE.md) and this file before starting. Update it at session close.
-> Last updated: **2026-06-12**.
+> Last updated: **2026-06-15**.
 
 ---
 
@@ -429,7 +429,7 @@ scheduler + worker (one of each) using the vetted `infra/systemd/` units (Linux/
 `infra/launchd/` agents (the current Mac-mini soak — `infra/launchd/install.sh`), enable a real
 embedding/LLM/Tika backend if desired, and let it run.
 
-**Current plan (2026-06-07):** the soak runs on a **Mac mini** (launchd; ultimately moving to a
+**Current plan (2026-06-15):** the soak runs on a **Mac mini** (launchd; ultimately moving to a
 Hetzner VPS), with **ntfy** for digest/alert delivery + a healthchecks.io dead-man's-switch. Run it
 from a **separate pinned clone** (`~/atlascore-soak`) so ongoing V1 development in the main checkout
 never touches the soak's DB/raw/code (see `infra/launchd/README.md` for the isolation model). V1 work
@@ -635,11 +635,13 @@ loop, a periodic restore-drill timer, and a `source_health` history table. None 
   `sources/nvd_recent_cves_keyed.yaml`; key redacted in logs/columns); NVD + SEC now fetch
   incrementally via the runtime-owned `source.checkpoint` cursor (NVD `lastMod` window, SEC
   newest-filing filter), re-fetch still idempotent (GUID+hash).
-- **SEC full filing-text extraction — WIRED in B22** ([ADR 0033](decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).
+- **SEC full filing-text extraction — FOUNDATION WIRED in B22** ([ADR 0033](decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).
   `security.sandbox.tika` (out-of-process, RLIMIT/timeout/non-root, network-less, import-guarded) +
   `FilingParser` (`filing@1.0.0`) + `SecSubmissionsConnector.extract_filing` (opt-in via
-  `fetch.params.extract_filings: 'true'` + `TIKA_MODE`) extract full filing text, with graceful
-  metadata-only fallback when Tika is absent (the default — so CI/sandbox stay green without Java).
+  `fetch.params.extract_filings: 'true'` + `TIKA_MODE`) are implemented, with graceful metadata-only
+  fallback when Tika is absent (the default — so CI/sandbox stay green without Java). The remaining
+  candidate depth follow-up is to wire that per-filing second fetch into the worker parse path when
+  full-filing search is needed.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
   - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
     creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked
