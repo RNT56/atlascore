@@ -5,10 +5,12 @@ All notable changes to AtlasCore are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-AtlasCore code is Apache-2.0; harvested data remains internal-only. Until the first tagged release,
-all work accumulates under **[Unreleased]**.
+AtlasCore code is Apache-2.0; harvested data remains internal-only. New work accumulates under
+**[Unreleased]** until it is assigned to a tagged release.
 
-## [Unreleased] - 2026-06-03
+## [Unreleased]
+
+## [0.1.0] - 2026-07-12
 
 This entry covers the planning + documentation scaffold, the **B1 skeleton** (the `atlascore`
 package, the Alembic harness, and the `source` schema), the **B2 source registry** (canonical YAML,
@@ -695,4 +697,5 @@ secrets-scan, integration).
   tool registration) and integration (stale/fresh/failing classification; `get_source_health`
   audited + secret-free; `atlas digest` surfaces a stale source). Verified live + over real stdio.
 
-[Unreleased]: https://example.invalid/atlascore/compare/HEAD
+[Unreleased]: https://github.com/RNT56/atlascore/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/RNT56/atlascore/releases/tag/v0.1.0
