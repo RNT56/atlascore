@@ -40,7 +40,7 @@ jobs:
     name: ruff format + lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -57,7 +57,7 @@ jobs:
     name: mypy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -72,17 +72,21 @@ jobs:
   test:
     name: pytest (unit + contract, no network)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
           enable-cache: true
       - name: Install project (locked)
         run: uv sync --frozen --all-extras
       - name: pytest (unit + contract only; live-network tests are opt-in and skipped here)
-        run: uv run pytest tests/unit -q
+        run: uv run pytest tests/unit -q --cov=atlascore --cov-report=term --cov-fail-under=65
         env:
           # Deterministic, offline test config (SPEC §19). No real DB/secrets in unit/contract tests.
           APP_ENV: ci
@@ -93,7 +97,7 @@ jobs:
     name: pip-audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -107,7 +111,7 @@ jobs:
         # up). Real CVEs in any dependency still fail the build.
         run: |
           uv export --frozen --no-emit-project --format requirements-txt > /tmp/requirements-audit.txt
-          uv run pip-audit --strict --requirement /tmp/requirements-audit.txt
+          uv run pip-audit --strict --disable-pip --requirement /tmp/requirements-audit.txt
 
   migrations:
     name: alembic migration check
@@ -130,7 +134,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://atlascore:atlascore@localhost:5432/atlascore_ci
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -160,7 +164,7 @@ jobs:
     name: source-registry YAML validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -178,7 +182,7 @@ jobs:
     name: secrets scan (detect-secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up uv
@@ -214,15 +218,40 @@ jobs:
           PY
 
   # ---------------------------------------------------------------------------
-  # OPTIONAL integration job: DB / raw-store / search / queue paths against a real
-  # Postgres 16 + pgvector. Heavier; kept separate so the fast lane stays fast.
-  # Still NO live external network — only the local service container.
+  build:
+    name: package build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Build wheel and source distribution
+        run: uv build
+
+  security:
+    name: security regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install project (locked)
+        run: uv sync --frozen --all-extras
+      - name: Run security-marked regressions
+        run: uv run pytest -m security -q
+
+  # DB / raw-store / search / queue paths against a real Postgres 16 + pgvector.
+  # Runs on every PR and push: schema/runtime regressions must block merge.
   # ---------------------------------------------------------------------------
   integration:
     name: integration (postgres 16 + pgvector)
     runs-on: ubuntu-latest
-    # Run on main and on demand; skip on routine PRs unless explicitly requested.
-    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration') }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -244,7 +273,7 @@ jobs:
       EMBEDDING_BACKEND: local
       LLM_BACKEND: none
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:

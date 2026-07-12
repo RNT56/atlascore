@@ -63,6 +63,7 @@ def _fetcher() -> SafeFetcher:
         clock=FixedClock(NOW),
         resolver=lambda _host: ["93.184.216.34"],  # public -> SSRF passes
         sleep=lambda _seconds: None,  # don't actually sleep on rate-limit spacing
+        pin_connections=False,
     )
 
 

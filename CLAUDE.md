@@ -26,7 +26,7 @@ Components:
 - Read-only MCP server over stdio (the 7-tool surface in section 13).
 - A Typer CLI (`atlas`) — the only ingestion-management/control-plane surface.
 
-**Repo posture:** PRIVATE first, but run full open-source-grade hygiene and CI from day one so it can be published later as **code-not-data**.
+**Repo posture:** PUBLIC Apache-2.0 code with open-source-grade hygiene and CI. The publication boundary is **code-not-data**; harvested content, operator config, credentials, raw stores, and backups stay private.
 
 **Out of scope unless a concrete present need appears (do not build speculatively):** multi-tenancy, RBAC, OIDC/identity provider, data redistribution, social-platform ingestion, broker APIs, browser-worker fleet, Kafka/ClickHouse/Neo4j/Qdrant/OpenSearch, Kubernetes, DPIA program, WORM audit exports, admin/write MCP surface.
 
@@ -165,7 +165,7 @@ atlascore/
   CHANGELOG.md                   (Keep a Changelog format)
   CONTRIBUTING.md
   SECURITY.md
-  LICENSE                        (proprietary/all-rights-reserved placeholder while private; switch to OSS at publish)
+  LICENSE                        (Apache License 2.0 for repository code; data remains internal-only)
   .gitignore
   .env.example
   .pre-commit-config.yaml
@@ -276,6 +276,8 @@ atlas tsp partitions status|ensure           # time_series_point yearly partitio
 atlas scheduler run                          # single-instance scheduler: due fetches + inline housekeeping (B19)
 atlas worker run [--role fetch|parse|enrich] # continuous fetch->parse->enrich drain loop (B19)
 atlas reindex-embeddings [--model][--dry-run] # bounded resumable embedding backfill/reindex (R8; B21)
+atlas summarize <doc_id>... [--cache-only]     # return/pre-warm a cited summary via the control plane
+atlas soak preflight [--send-probes]          # fail-closed deployment/soak readiness gate
 ```
 
 If a command doesn't exist yet, add it (CLI is the control plane) or report the actual command used. `atlas health`/`atlas digest` are control-plane and MCP-independent.
@@ -490,7 +492,7 @@ The internal-only + RSS/API-first decisions keep this short.
 - **Retention classes:** raw 1–2y then prune; normalized kept; audit routine rotates but **purge-records retained** (`retention_class='purge'`); alerts 6–12mo. Public ≠ indefinitely retainable.
 - **Robots:** a POLICY INPUT for the human when setting source policy (and runtime only for the rare permitted HTML/browser source) — NOT a general runtime gate for API/RSS. No HTML/browser source ships in MVP, so no runtime robots gate is built in B1–B15; the `robots` field is advisory until an HTML source is approved (a runtime robots check is added in that connector's block at that time).
 - **Secrets/SOPS (chosen shape):** `.env` gitignored → env vars. An optional `age`/SOPS-encrypted file MAY be committed; the decrypt key lives OUTSIDE the repo (password manager / hardware key). Concrete shape: allow `secrets.sops.yaml` in the tree, a `.sops.yaml` recipient config, `SOPS_AGE_KEY_FILE` pointing outside the repo, and the deploy runbook step `sops -d secrets.sops.yaml > .env`. Source YAML contains NO secrets and NO private endpoints.
-- **FOSS boundary:** publish code, never data; no hardcoded private credentials or licensed feeds. Private repo now; choose Apache-2.0 or MIT at publish (`LICENSE` is currently a proprietary placeholder).
+- **FOSS boundary:** code is Apache-2.0; never publish harvested data, operator configuration, credentials, raw stores, backups, private endpoints, or licensed feeds.
 - **Don't touch** licensed market/news wires, paywalls, broker APIs, or social platforms in this build.
 
 ---

@@ -85,7 +85,22 @@ def test_webhook_channel_send() -> None:
 def test_webhook_channel_raises_on_error() -> None:
     respx.post("https://hook.test/x").mock(return_value=httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
-        WebhookChannel("https://hook.test/x").send("s", "b")
+        WebhookChannel("https://hook.test/x", attempts=1).send("s", "b")
+
+
+@respx.mock
+def test_webhook_retries_and_honors_retry_after() -> None:
+    waits: list[float] = []
+    route = respx.post("https://hook.test/x").mock(
+        side_effect=[
+            httpx.Response(429, headers={"retry-after": "2"}),
+            httpx.Response(200),
+        ]
+    )
+    status = WebhookChannel("https://hook.test/x", sleep=waits.append).send("s", "b")
+    assert status == "sent"
+    assert waits == [2.0]
+    assert route.call_count == 2
 
 
 def test_severity_order() -> None:

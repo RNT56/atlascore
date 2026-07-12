@@ -13,6 +13,8 @@ also backs the B8 daily digest (`atlas digest`), replacing its stdout-only seam.
 from __future__ import annotations
 
 import smtplib
+import time
+from collections.abc import Callable
 from email.message import EmailMessage
 from typing import Protocol, runtime_checkable
 
@@ -23,6 +25,39 @@ from atlascore.core.settings import Settings, get_settings
 
 _log = get_logger("atlascore.alerts.delivery")
 _TIMEOUT = 10.0
+_ATTEMPTS = 3
+_BACKOFF_SECONDS = 1.0
+
+
+def _retry_after(exc: Exception) -> float | None:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return None
+    value = exc.response.headers.get("retry-after", "")
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None
+
+
+def _deliver_with_retry(
+    operation: Callable[[], str],
+    *,
+    attempts: int,
+    sleep: Callable[[float], None],
+) -> str:
+    """Retry transient delivery failures with bounded exponential/Retry-After backoff."""
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return operation()
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 >= attempts:
+                break
+            delay = _retry_after(exc)
+            sleep(delay if delay is not None else _BACKOFF_SECONDS * (2**attempt))
+    assert last_error is not None  # noqa: S101 — attempts is always at least one
+    raise last_error
 
 
 @runtime_checkable
@@ -50,13 +85,24 @@ class WebhookChannel:
 
     name = "webhook"
 
-    def __init__(self, url: str) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        attempts: int = _ATTEMPTS,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self._url = url
+        self._attempts = max(1, attempts)
+        self._sleep = sleep
 
     def send(self, subject: str, body: str) -> str:
-        resp = httpx.post(self._url, json={"title": subject, "message": body}, timeout=_TIMEOUT)
-        resp.raise_for_status()
-        return "sent"
+        def operation() -> str:
+            resp = httpx.post(self._url, json={"title": subject, "message": body}, timeout=_TIMEOUT)
+            resp.raise_for_status()
+            return "sent"
+
+        return _deliver_with_retry(operation, attempts=self._attempts, sleep=self._sleep)
 
 
 class NtfyChannel:
@@ -64,15 +110,30 @@ class NtfyChannel:
 
     name = "ntfy"
 
-    def __init__(self, topic: str, *, base_url: str = "https://ntfy.sh") -> None:
+    def __init__(
+        self,
+        topic: str,
+        *,
+        base_url: str = "https://ntfy.sh",
+        attempts: int = _ATTEMPTS,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self._url = f"{base_url.rstrip('/')}/{topic}"
+        self._attempts = max(1, attempts)
+        self._sleep = sleep
 
     def send(self, subject: str, body: str) -> str:
-        resp = httpx.post(
-            self._url, content=body.encode("utf-8"), headers={"Title": subject}, timeout=_TIMEOUT
-        )
-        resp.raise_for_status()
-        return "sent"
+        def operation() -> str:
+            resp = httpx.post(
+                self._url,
+                content=body.encode("utf-8"),
+                headers={"Title": subject},
+                timeout=_TIMEOUT,
+            )
+            resp.raise_for_status()
+            return "sent"
+
+        return _deliver_with_retry(operation, attempts=self._attempts, sleep=self._sleep)
 
 
 class SmtpChannel:
@@ -80,10 +141,18 @@ class SmtpChannel:
 
     name = "email"
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        attempts: int = _ATTEMPTS,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         if not settings.smtp_host or not settings.smtp_from or not settings.smtp_to:
             raise ValueError("SMTP channel needs SMTP_HOST, SMTP_FROM and SMTP_TO")
         self._settings = settings
+        self._attempts = max(1, attempts)
+        self._sleep = sleep
 
     def send(self, subject: str, body: str) -> str:
         s = self._settings
@@ -92,12 +161,16 @@ class SmtpChannel:
         msg["From"] = s.smtp_from or ""
         msg["To"] = s.smtp_to or ""
         msg.set_content(body)
-        with smtplib.SMTP(s.smtp_host or "", s.smtp_port, timeout=_TIMEOUT) as smtp:
-            if s.smtp_user and s.smtp_pass is not None:
-                smtp.starttls()
-                smtp.login(s.smtp_user, s.smtp_pass.get_secret_value())
-            smtp.send_message(msg)
-        return "sent"
+
+        def operation() -> str:
+            with smtplib.SMTP(s.smtp_host or "", s.smtp_port, timeout=_TIMEOUT) as smtp:
+                if s.smtp_user and s.smtp_pass is not None:
+                    smtp.starttls()
+                    smtp.login(s.smtp_user, s.smtp_pass.get_secret_value())
+                smtp.send_message(msg)
+            return "sent"
+
+        return _deliver_with_retry(operation, attempts=self._attempts, sleep=self._sleep)
 
 
 def _clean(value: str | None) -> str:

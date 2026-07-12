@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from atlascore.connectors_sdk.base import Connector, FetchContext, OutputKind
 from atlascore.connectors_sdk.fetcher import SafeFetcher
+from atlascore.connectors_sdk.types import FetchOutcome
 from atlascore.core.clock import Clock, SystemClock
 from atlascore.core.errors import ConfigError, FetchWorkerBusyError, PolicyError
 from atlascore.core.logging import get_logger
@@ -156,6 +157,78 @@ def run_fetch_job(
     if outcome.not_modified:
         return FetchJobResult(True, 0, 0, None)
 
+    raw_doc = _store_fetch_outcome(
+        session,
+        source=source,
+        job=job,
+        outcome=outcome,
+        raw_store=raw_store,
+        clock=clock,
+    )
+
+    entries = connector.filter_entries(connector.parse_entries(outcome.content), checkpoint)
+    slug = config.get("slug") or str(source.id)
+    new_entries = 0
+    for entry in entries:
+        parse_raw = raw_doc
+        parser_ref: str | None = None
+        secondary = connector.fetch_entry_content(fetcher, ctx, entry)
+        if secondary is not None:
+            parser_ref = secondary.parser_ref
+            parse_raw = _store_fetch_outcome(
+                session,
+                source=source,
+                job=job,
+                outcome=secondary.outcome,
+                raw_store=raw_store,
+                clock=clock,
+                parser_ref=parser_ref,
+            )
+        # Key the parse job on (guid, raw content hash), not the guid alone: when a publisher
+        # edits an item in place under a stable GUID, the feed's bytes change -> a NEW raw is
+        # stored -> a NEW parse job is enqueued and the edit is re-parsed (last-write-wins, R2).
+        # An unchanged refetch yields the same raw hash -> same key -> idempotent no-op.
+        dedupe_key = f"parse:{slug}:{entry.guid}:{parse_raw.content_hash}"
+        already = session.scalar(select(CrawlJob.id).where(CrawlJob.dedupe_key == dedupe_key))
+        payload = {
+            "guid": entry.guid,
+            "link": entry.link,
+            "title": entry.title,
+            "published_at": entry.published.isoformat() if entry.published else None,
+            "raw_document_id": str(parse_raw.id),
+        }
+        if parser_ref is not None:
+            payload["parser_ref"] = parser_ref
+        enqueue(
+            session,
+            source_id=source.id,
+            job_type=JobType.PARSE,
+            dedupe_key=dedupe_key,
+            scheduled_at=clock.now(),
+            payload=payload,
+        )
+        if already is None:
+            new_entries += 1
+
+    # B20: persist the connector's next incremental cursor (default None ⇒ RSS/FRED unchanged), in
+    # this same job txn so the cursor only advances on a fully-processed fetch.
+    next_cp = connector.next_checkpoint(outcome.content, checkpoint)
+    if next_cp is not None:
+        set_checkpoint(session, source.id, next_cp)
+    return FetchJobResult(False, new_entries, len(entries), raw_doc.id)
+
+
+def _store_fetch_outcome(
+    session: Session,
+    *,
+    source: Source,
+    job: CrawlJob,
+    outcome: FetchOutcome,
+    raw_store: RawStore,
+    clock: Clock,
+    parser_ref: str | None = None,
+) -> RawDocument:
+    """Persist one validated fetch outcome as immutable raw evidence, idempotently."""
     blob = raw_store.put(outcome.content)
     raw_doc = session.scalar(
         select(RawDocument).where(RawDocument.content_hash == blob.content_hash)
@@ -172,43 +245,13 @@ def run_fetch_job(
             http_status=outcome.status,
             etag=outcome.etag,
             last_modified=outcome.last_modified,
+            origin_url=outcome.final_url,
+            parser_ref=parser_ref,
             schema_version=SCHEMA_VERSION,
         )
         session.add(raw_doc)
         session.flush()
-
-    entries = connector.filter_entries(connector.parse_entries(outcome.content), checkpoint)
-    slug = config.get("slug") or str(source.id)
-    new_entries = 0
-    for entry in entries:
-        # Key the parse job on (guid, raw content hash), not the guid alone: when a publisher
-        # edits an item in place under a stable GUID, the feed's bytes change -> a NEW raw is
-        # stored -> a NEW parse job is enqueued and the edit is re-parsed (last-write-wins, R2).
-        # An unchanged refetch yields the same raw hash -> same key -> idempotent no-op.
-        dedupe_key = f"parse:{slug}:{entry.guid}:{raw_doc.content_hash}"
-        already = session.scalar(select(CrawlJob.id).where(CrawlJob.dedupe_key == dedupe_key))
-        enqueue(
-            session,
-            source_id=source.id,
-            job_type=JobType.PARSE,
-            dedupe_key=dedupe_key,
-            scheduled_at=clock.now(),
-            payload={
-                "guid": entry.guid,
-                "link": entry.link,
-                "title": entry.title,
-                "raw_document_id": str(raw_doc.id),
-            },
-        )
-        if already is None:
-            new_entries += 1
-
-    # B20: persist the connector's next incremental cursor (default None ⇒ RSS/FRED unchanged), in
-    # this same job txn so the cursor only advances on a fully-processed fetch.
-    next_cp = connector.next_checkpoint(outcome.content, checkpoint)
-    if next_cp is not None:
-        set_checkpoint(session, source.id, next_cp)
-    return FetchJobResult(False, new_entries, len(entries), raw_doc.id)
+    return raw_doc
 
 
 def _dispatch_fetch_job(

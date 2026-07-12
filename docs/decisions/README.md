@@ -34,7 +34,7 @@ deep-dive instead.
 | [0011](0011-mcp-read-only-seven-tool-surface.md) | Expose a read-only seven-tool MCP surface over stdio with injection safety and side-effect confirmation instead of RBAC | Accepted | 2026-06-03 | — |
 | [0012](0012-packaging-layout-src-atlascore.md) | Adopt a single `src/atlascore` import root; preserve `packages`/`apps` as the subpackage grouping | Accepted | 2026-06-03 | — (B1 packaging) |
 | [0013](0013-source-registry-on-disk-and-slug-round-trip.md) | Source registry in `sources/`; YAML slug round-trips in `config`; B2 adds `source sync`/`list` | Accepted | 2026-06-03 | — (B2 registry) |
-| [0014](0014-ssrf-validate-all-ips-pin-deferred.md) | SSRF guard validates all resolved IPs + re-validates redirects; connection-pinning deferred | Accepted | 2026-06-03 | — (B4 SSRF/§14) |
+| [0014](0014-ssrf-validate-all-ips-pin-deferred.md) | SSRF guard validates all resolved IPs + re-validates redirects; connection-pinning deferred | Superseded by 0038 | 2026-06-03 | — (B4 SSRF/§14) |
 | [0015](0015-b5-parse-pipeline-and-nh3-sanitizer.md) | B5 parse pipeline: network-free parse, last-write-wins `document` upsert, nh3 HTML sanitizer | Accepted | 2026-06-04 | R2 (B5 parser/§2.4/§14) |
 | [0016](0016-b6-fts-query-path-and-search-contract.md) | B6 full-text search: `'simple'`-config FTS over `document`, `websearch_to_tsquery` + `ts_rank`, static parameterized SQL, index-usage regression | Accepted | 2026-06-04 | — (B6 search/§2.4/§13/§15) |
 | [0017](0017-b7-mcp-server-search-documents-and-audit-log.md) | B7 MCP server: `search_documents` (reuses B6 path, capped, sanitized, audited) + `audit_log` table (no FKs, sanitized `detail`) over stdio | Accepted | 2026-06-04 | R14 (B7 MCP/§2.11/§13/§14) |
@@ -58,6 +58,9 @@ deep-dive instead.
 | [0035](0035-v1-read-only-fastapi-dashboard.md) | V1 read-only FastAPI dashboard (`atlascore.api`, `web` extra): `/healthz` + `/v1/search`/`/v1/alerts`/`/v1/sources/health` reusing the storage query fns; capped, secret-free, no-auth (loopback/VPN); module-level `app.state` session dependency (avoids the future-annotations closure-Depends 422) | Accepted | 2026-06-07 | §7/§13/§6 (v1) |
 | [0036](0036-v1-adopt-sops-age-encrypted-secrets.md) | V1 wire the OPTIONAL SOPS/age encrypted-secrets path: `.sops.yaml` recipient config + `infra/decrypt-secrets.sh` (YAML↔dotenv via `--output-type`/`--filename-override`); freeze-compatible (no source/service); key stays outside the repo | Accepted | 2026-06-07 | §3/§12/§16 (v1) |
 | [0037](0037-v1-server-rendered-read-only-webui.md) | V1 server-rendered read-only WebUI (`atlascore.api.web`, `web` extra: +jinja2): Jinja2 + zero-JS dashboard on the existing API app (`/`, `/search`, `/documents/{id}`, `/alerts`, `/sources`, `/macro`); autoescape + `safe_url` scheme allowlist + secret-free; no auth (loopback/VPN) | Accepted | 2026-06-08 | §7/§13/§6 (v1) |
+| [0038](0038-ssrf-literal-ip-sni-connection-pinning.md) | Pin outbound fetches to validated literal IPs with Host/SNI preservation and cross-origin credential stripping | Accepted | 2026-07-12 | §14 (security) |
+| [0039](0039-secondary-entry-raw-provenance-and-sec-filings.md) | Preserve secondary entry payloads as immutable raw evidence and parse them locally; complete SEC full-filings | Accepted | 2026-07-12 | §6/§10/§12 (v1 depth) |
+| [0040](0040-public-apache-2-release-posture.md) | Publish AtlasCore code under Apache-2.0 while keeping harvested data internal-only | Accepted | 2026-07-12 | §1/§16 (release) |
 
 > ADRs 0001–0011 encode the canonical-spec resolutions R1–R8 plus the naming and
 > MCP-surface decisions: R1/R2 in 0003/0002, R3 in 0009, R4 in 0006, R5 in 0008,

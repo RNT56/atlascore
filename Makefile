@@ -30,7 +30,7 @@ COMPOSE ?= docker compose --project-directory . --env-file .env -f infra/docker-
 
 .DEFAULT_GOAL := help
 .PHONY: help setup dev down migrate seed format lint typecheck test \
-        test-unit test-integration security smoke audit precommit clean
+        test-unit test-integration security smoke audit soak-preflight precommit clean
 
 help: ## Show this help.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -84,6 +84,9 @@ smoke: ## Local end-to-end smoke: source -> ingest -> enrich -> search -> MCP su
 
 audit: ## Dependency vulnerability audit (pip-audit).
 	$(RUN) pip-audit
+
+soak-preflight: ## Fail closed unless production config, DB, delivery, heartbeat, and backups are ready.
+	$(RUN) atlas soak preflight
 
 precommit: ## Run all pre-commit hooks on the whole tree (what CI also runs).
 	$(RUN) pre-commit run --all-files

@@ -5,8 +5,8 @@ All notable changes to AtlasCore are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-This is a private, internal-only project (FOSS boundary is code, not data). Until the
-first tagged release, all work accumulates under **[Unreleased]**.
+AtlasCore code is Apache-2.0; harvested data remains internal-only. Until the first tagged release,
+all work accumulates under **[Unreleased]**.
 
 ## [Unreleased] - 2026-06-03
 
@@ -30,11 +30,17 @@ components, not new sources/services).
 
 ### Added
 
+- **V0.1 release/security completion** (ADRs 0038–0040): Apache-2.0 public code posture and version
+  `0.1.0`; audit-clean upgraded lock with security floors; literal-IP/SNI SSRF connection pinning,
+  multi-address failover, redirect revalidation, cross-origin credential stripping, and direct
+  production egress; SEC primary filings wired through secondary guarded fetch → immutable raw
+  provenance (migration 0013) → network-free FilingParser → canonical search/enrichment; fail-closed
+  `atlas soak preflight [--send-probes]`; `atlas summarize`; delivery retry/`Retry-After`; real package
+  metadata; Python 3.12/3.13 coverage, package/security jobs, and mandatory PR integration CI.
+
 - **Docs — current roadmap/status reconciliation.** Refreshed the living status/runbook dates,
-  clarified that B20 NVD keyed/incremental fetching and B22 SEC full-filing extraction foundations
-  are shipped, and corrected stale "later follow-up" wording in connector/source docs. The remaining
-  SEC follow-up is specifically the worker-path second fetch for searchable full-filing text when
-  needed.
+  reconciled NVD/SEC/runtime behavior, and later completed the SEC worker-path secondary fetch under
+  ADR 0039.
 
 - **V1 — server-rendered read-only WebUI** (`atlascore.api.web`, behind the `web` extra;
   [ADR 0037](docs/decisions/0037-v1-server-rendered-read-only-webui.md)). A Jinja2 + plain-HTML
@@ -157,9 +163,8 @@ components, not new sources/services).
   - `SecSubmissionsConnector.extract_filing(...)`: opt-in helper via `fetch.params.extract_filings:
     'true'` + `tika_available()`; fetches the primary filing doc through the same SSRF-guarded fetcher
     (PDF/HTML MIME allowlist) and extracts full text, else returns `None` so callers fall back to the
-    B10 metadata body (a bad filing never fails the crawl; CI/sandbox stay green without Java). The
-    default soak/CI parse path remains metadata-only until that per-filing second fetch is wired.
-    New `TIKA_*` settings.
+    B10 metadata body (a bad filing never fails the crawl; CI/sandbox stay green without Java).
+    ADR 0039 later wired this helper into production fetch/raw/parse flow. New `TIKA_*` settings.
 
 - **B21 — real embedding/LLM backends + hard spend cap + spaCy NER + reindex** ([ADR 0032](docs/decisions/0032-b21-real-backends-spend-cap-spacy-reindex.md)).
   - Embeddings: `EMBEDDING_BACKEND=sentence-transformers` (real local, import-guarded) and

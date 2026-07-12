@@ -73,7 +73,7 @@ def _fetch_role(
             yield injected
             return
         settings = get_settings()
-        with httpx.Client() as client:
+        with httpx.Client(trust_env=False) as client:
             yield SafeFetcher(
                 client=client, clock=SystemClock(), user_agent=settings.default_user_agent
             )

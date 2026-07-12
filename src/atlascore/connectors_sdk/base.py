@@ -15,7 +15,12 @@ from enum import StrEnum
 from typing import Any, ClassVar
 
 from atlascore.connectors_sdk.fetcher import SafeFetcher
-from atlascore.connectors_sdk.types import FeedEntry, FetchOutcome, ParsedSeries
+from atlascore.connectors_sdk.types import (
+    FeedEntry,
+    FetchedEntryContent,
+    FetchOutcome,
+    ParsedSeries,
+)
 
 
 class OutputKind(StrEnum):
@@ -84,6 +89,16 @@ class Connector(ABC):
         raise NotImplementedError(
             f"{type(self).__name__} does not produce time-series observations"
         )
+
+    def fetch_entry_content(
+        self, fetcher: SafeFetcher, ctx: FetchContext, entry: FeedEntry
+    ) -> FetchedEntryContent | None:
+        """Optionally fetch a primary payload for one parsed index/feed entry.
+
+        Default ``None`` preserves the normal feed path. Implementations must use ``fetcher`` and
+        return the local parser reference that will process the stored bytes in a parse worker.
+        """
+        return None
 
     # --- Incremental-fetch cursor hooks (B20; default no-ops — RSS/FRED are unaffected) ---
 

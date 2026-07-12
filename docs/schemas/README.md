@@ -210,6 +210,8 @@ CREATE INDEX crawl_job_source_idx       ON crawl_job (source_id);
 | `http_status` | `int` | |
 | `etag` | `text` | conditional-request checkpoint |
 | `last_modified` | `text` | conditional-request checkpoint |
+| `origin_url` | `text` | final public fetch URL for provenance/reparse; nullable on legacy rows |
+| `parser_ref` | `text` | local parser for secondary entry payloads; nullable on normal feed/index raw |
 | `schema_version` | `int` | |
 
 **Indexes.** `unique(content_hash)`; `btree(source_id, fetched_at)`.
@@ -231,10 +233,16 @@ CREATE TABLE raw_document (
     http_status    integer,
     etag           text,
     last_modified  text,
+    origin_url     text,
+    parser_ref     text,
     schema_version integer NOT NULL
 );
 CREATE INDEX raw_document_source_fetched_idx ON raw_document (source_id, fetched_at);
 ```
+
+> **Migration 0013 / ADR 0039.** Secondary entry payloads such as SEC primary filings are preserved
+> as their own raw objects. `origin_url` and `parser_ref` keep those objects self-describing while
+> parse workers remain network-free. Existing rows require no backfill.
 
 ---
 

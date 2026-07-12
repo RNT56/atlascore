@@ -1,5 +1,7 @@
 # 0014. SSRF guard validates all resolved IPs + re-validates every redirect hop; connection-pinning deferred
 
+> **Superseded by [ADR 0038](0038-ssrf-literal-ip-sni-connection-pinning.md) on 2026-07-12.**
+
 - **Status:** Accepted
 - **Date:** 2026-06-03
 - **Deciders:** Operator (single-operator project)

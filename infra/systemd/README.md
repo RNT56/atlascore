@@ -16,6 +16,7 @@ deploy walkthrough.
 | `atlascore-worker-proc@.service` | *optional* parse/enrich-only capacity (no fetch lock) | scale out |
 | `atlascore-backup.service` + `.timer` | nightly `infra/backup.sh` (offsite) | one timer |
 | `atlascore-digest.service` + `.timer` | daily digest over the alert channel | one timer |
+| `atlascore-restore-drill.service` + `.timer` | weekly disposable restore of newest dump | one timer |
 
 ## Assumptions (edit the units if your layout differs)
 
@@ -40,6 +41,7 @@ sudo systemctl enable --now atlascore-scheduler.service
 sudo systemctl enable --now atlascore-worker.service
 sudo systemctl enable --now atlascore-backup.timer
 sudo systemctl enable --now atlascore-digest.timer
+sudo systemctl enable --now atlascore-restore-drill.timer
 
 # Optional extra parse/enrich capacity (NEVER a second fetch worker):
 # sudo systemctl enable --now atlascore-worker-proc@1.service
@@ -51,7 +53,7 @@ sudo systemctl enable --now atlascore-digest.timer
 pgrep -af 'atlas scheduler run' | wc -l    # expect 1
 pgrep -af 'atlas worker run'    | wc -l    # expect 1 (the fetch worker; +N proc workers if enabled)
 atlas health                               # source_health + DLQ depth + scheduler/fetch-worker liveness
-systemctl list-timers 'atlascore-*'        # backup + digest scheduled
+systemctl list-timers 'atlascore-*'        # backup + digest + restore drill scheduled
 ```
 
 ## Dead-man's-switch (strongly recommended for unattended runs)

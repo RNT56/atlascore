@@ -32,12 +32,16 @@ def test_raw_document_indexes_blob_and_dedupes(migrated_engine: Engine, tmp_path
             path=blob.relpath,
             size_bytes=blob.size_bytes,
             mime_type="application/rss+xml",
+            origin_url="https://feed.example.test/rss",
+            parser_ref=None,
             schema_version=1,
         )
         session.add(row)
         session.flush()
         assert row.id is not None
         assert row.id.version == 7  # UUIDv7 PK
+        assert row.origin_url == "https://feed.example.test/rss"
+        assert row.parser_ref is None
 
         # content_hash is the content address: a duplicate raw_document is rejected.
         duplicate = RawDocument(

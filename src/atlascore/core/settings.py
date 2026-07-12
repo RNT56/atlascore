@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     tika_rlimit_cpu_seconds: int = 60  # subprocess CPU-time cap
 
     # --- HTTP fetcher (transparent project UA + contact; never browser-impersonating) ---
-    default_user_agent: str = "AtlasCore/0.0 (single-operator research; contact: you@example.com)"
+    default_user_agent: str = "AtlasCore/0.1.0 (single-operator research; contact: you@example.com)"
 
     # --- Alert delivery (one channel; others blank) ---
     alert_webhook_url: SecretStr | None = None

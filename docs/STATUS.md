@@ -2,20 +2,20 @@
 
 > **This is the shared coordination board for every session (human or AI) and every worker.**
 > Read [`../CLAUDE.md`](../CLAUDE.md) and this file before starting. Update it at session close.
-> Last updated: **2026-06-15**.
+> Last updated: **2026-07-12**.
 
 ---
 
 ## Current phase
 
-**MVP (B1–B15) and post-MVP cycle B16–B22 are complete. `main` also contains the first v1 parallel-track increments through ADR 0037. The soak boundary remains operational: run the month-long unattended soak from a separate pinned clone, with scheduler + worker deployed and real alerting/heartbeat/backups configured.**
+**MVP B1–B15, post-MVP B16–B22, and the v0.1 release/security completion through ADR 0040 are complete. The code is Apache-2.0, dependencies are audit-clean, SSRF connections are literal-IP/SNI pinned, SEC full-filings are production-wired, and the soak preflight is executable. The remaining boundary is operational: run the month-long unattended soak from a separate pinned clone.**
 
 The post-MVP upgrade cycle **B16–B22** added depth on existing components (not new sources/services, so
 the §5 freeze is respected): audit_log rotation + crawl_job prune (B16), `time_series_point` yearly
 partitions (B17), alert watchlist gating + lifecycle CLI (B18), the single-instance scheduler +
 continuous worker loop (B19), connector depth — custom headers + NVD keyed tier + incremental checkpoint
 (B20), real embedding/LLM backends + a hard spend cap + spaCy NER + `atlas reindex-embeddings` (B21),
-and SEC full-filing extraction via sandboxed Tika (B22). Migrations 0010/0011/0012 applied + drift-free;
+and SEC full-filing extraction via sandboxed Tika (B22/ADR 0039). Migrations 0010–0013 applied + drift-free;
 the deterministic offline backends remain the CI default. Full detail in the **Done — Post-MVP upgrade
 cycle (B16–B22)** section below.
 
@@ -362,7 +362,23 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-- _(nothing in progress — soak-readiness hardening shipped; see the Done section below.)_
+- _(nothing in progress — v0.1 release/security completion shipped; the soak is an operator run.)_
+
+## Done — v0.1 release/security completion (2026-07-12)
+
+- **Public release posture:** Apache-2.0 code license, version `0.1.0`, real repository metadata,
+  and public-facing docs reconciled to the code-not-data boundary (ADR 0040).
+- **Supply chain:** full `uv lock --upgrade`, explicit security floors, audit-clean lock, checkout v7,
+  Python 3.12/3.13 coverage, security/package jobs, and mandatory PG16 integration on pull requests.
+- **SSRF:** validated literal-IP connection pinning with original Host/SNI, multi-address failover,
+  redirect re-validation, cross-origin credential stripping, and proxy-disabled production egress
+  (ADR 0038; supersedes ADR 0014).
+- **SEC full filings:** primary filing fetches run in the single fetch role, each payload is immutable
+  raw evidence, and network-free parse workers run FilingParser. Migration 0013 records raw origin
+  URL + parser provenance; metadata fallback remains graceful (ADR 0039).
+- **Operations:** `atlas soak preflight [--send-probes]`, backup/offsite env contract, `atlas
+  summarize`, delivery retry/backoff, weekly systemd/launchd restore drill, updated runbooks, and
+  current CLI/docs wiring.
 
 ## Done — Soak-readiness hardening (pre-soak, 2026-06-06)
 
@@ -418,7 +434,7 @@ components, NOT a new source/service ([ADR 0034](decisions/0034-soak-readiness-h
 
 ## Next
 
-**The B16–B22 post-MVP upgrade cycle is COMPLETE** (migrations 0010 (B17) / 0011 (B20) / 0012 (B21)
+**The B16–B22 post-MVP upgrade cycle is COMPLETE** (migrations 0010 (B17) / 0011 (B20) / 0012 (B21) / 0013 (secondary raw provenance)
 all applied; drift-free). Heavy/cloud paths (B21 sentence-transformers/cloud + B22 Tika/Java) keep the
 deterministic offline default as the CI path and are contract-tested with respx + import guards. The
 7-tool MCP surface stayed stable across the whole cycle.
@@ -481,9 +497,8 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
 **Pre-soak operator checklist (the remaining work is on the box, not in the repo):**
 1. `cp .env.example .env`, set a real `POSTGRES_PASSWORD` (+ matching `DATABASE_URL` password) and a
    real `DEFAULT_USER_AGENT` (SEC EDGAR requires a contact).
-2. **Configure + end-to-end TEST a real delivery channel** (ntfy is cheapest) — run `atlas digest` +
-   `atlas alerts run` and confirm the message reaches your device. Do NOT soak on the silent
-   `LogChannel` default.
+2. **Configure + end-to-end TEST a real delivery channel** (ntfy is cheapest) and run `atlas soak
+   preflight --send-probes`. Do NOT soak on the silent `LogChannel` default.
 3. **Set `HEARTBEAT_URL`** to an external monitor (e.g. healthchecks.io) with a ~5–10 min grace, so a
    dead box/scheduler pages instead of going silent.
 4. **Prove backups restore on the real host:** `pg_dump` on PATH, `BACKUP_OFFSITE_REMOTE`/`_RSYNC` set,
@@ -494,9 +509,8 @@ proceeds in branches during the soak and is NOT deployed into the soak instance 
 
 The **embedding-spend ledger**, the **dead-man's-switch**, and the **deploy-glue/runbook** follow-ups
 are now DONE (see the Done section above; [ADR 0034](decisions/0034-soak-readiness-hardening.md)).
-Remaining candidate *depth* follow-ups (NOT new sources/services), only if a concrete need appears:
-an `atlas summarize` pre-warm CLI, per-filing second-fetch wiring of B22 extraction into the worker
-loop, a periodic restore-drill timer, and a `source_health` history table. None are started.
+The only need-gated depth candidate is a `source_health` history table. It is not required before the
+soak; summary pre-warm, SEC per-filing wiring, and a weekly restore-drill timer shipped in v0.1.
 
 ---
 
@@ -536,9 +550,9 @@ loop, a periodic restore-drill timer, and a `source_health` history table. None 
   watched/critical items when an active `watchlist.yaml` is present (CVSS via an NVD body marker;
   absent/inactive ⇒ fire-on-everything, backward compatible); `atlas alerts ack|resolve|list` drive
   the lifecycle ([ADR 0029](decisions/0029-b18-alert-watchlist-and-lifecycle.md)). Remaining (by
-  design): `macro_release`/`freshness` carry evidence in `detail` (no backing document); the
-  `freshness` dedupe is per `(source, status)`; delivery is fire-and-record (no backoff). Timed alert
-  evaluation now runs inline in the B19 scheduler (`atlas scheduler run`) on the alert cadence.
+  design): `macro_release`/`freshness` carry evidence in `detail` (no backing document), and the
+  `freshness` dedupe is per `(source, status)`. Delivery now retries three times with bounded
+  exponential or `Retry-After` backoff. Timed evaluation runs inline in the B19 scheduler.
 - **Unattended operation — DELIVERED in B19.** `atlas scheduler run` (single-instance, advisory-locked)
   enqueues due fetches + runs freshness/alert/partition/audit inline; `atlas worker run` drains
   fetch→parse→enrich (fetch under the single-fetch lock). `atlas health`/`atlas digest` report real
@@ -560,9 +574,8 @@ loop, a periodic restore-drill timer, and a `source_health` history table. None 
   specific contract. With the default `LLM_BACKEND=none` it is cache-only (no summary writes); a
   write happens only once a backend is configured and `allow_compute` is true. Documented in
   [ADR 0022](decisions/0022-b12-summaries-pipeline-and-content-hash-cache.md).
-- **No `atlas summarize` CLI in MVP.** Summaries are produced via `get_document_summary`
-  (`allow_compute=true` warms the cache); there is no control-plane summary command (not in
-  CLAUDE.md §9). A pre-warm CLI is a possible later convenience.
+- **Summary pre-warm CLI — RESOLVED 2026-07-12.** `atlas summarize <doc_id>...` uses the canonical
+  cache/spend-cap pipeline; `--cache-only` forbids compute.
 - **Default enrichment remains deterministic unless a real backend is configured.** The `local`
   embedding backend is a **hashing vectorizer** (lexical overlap, not semantics), and the default NER
   backend is **rule-based** (ticker/CIK + capitalized phrases), precision-over-recall: it drops
@@ -581,11 +594,10 @@ loop, a periodic restore-drill timer, and a `source_health` history table. None 
 - **`atlas crawl enqueue` is not idempotent across reruns** — the manual dedupe_key is timestamped
   (`fetch:<slug>:manual:<iso>`), so each invocation enqueues a fresh job (intended for a one-shot).
   The B19 scheduler's per-tick dedupe_keys are stable.
-- **SSRF connection-pinning still deferred** (ADR 0014) — the guard validates all resolved IPs and
-  re-validates every redirect hop, but the socket is not pinned to the validated IP, so a sub-second
-  DNS-rebinding TOCTOU window remains. Accepted for a single-operator box; harden before any exposed
-  deployment. (The B5 review independently re-confirmed the IP classification is correct for
-  6to4/NAT64/IPv4-mapped/decimal-literal edges.)
+- **SSRF connection pinning — RESOLVED 2026-07-12** (ADR 0038). Fetches connect to a validated
+  literal IP while retaining the original Host/SNI, fail over only across the already-validated
+  addresses, revalidate public redirect URLs, strip credentials on cross-origin redirects, and
+  disable environment proxies in production fetch paths.
 - **nh3 `<head>` fragment edge** — `strip_html` (nh3) parses fragments in a body context, so bare text
   placed *directly* inside `<head>` can pass through as inert text (never active content). Not reachable
   via the B5 RSS path (feedparser hands the parser an extracted content fragment, no `<head>`).
@@ -635,18 +647,13 @@ loop, a periodic restore-drill timer, and a `source_health` history table. None 
   `sources/nvd_recent_cves_keyed.yaml`; key redacted in logs/columns); NVD + SEC now fetch
   incrementally via the runtime-owned `source.checkpoint` cursor (NVD `lastMod` window, SEC
   newest-filing filter), re-fetch still idempotent (GUID+hash).
-- **SEC full filing-text extraction — FOUNDATION WIRED in B22** ([ADR 0033](decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).
-  `security.sandbox.tika` (out-of-process, RLIMIT/timeout/non-root, network-less, import-guarded) +
-  `FilingParser` (`filing@1.0.0`) + `SecSubmissionsConnector.extract_filing` (opt-in via
-  `fetch.params.extract_filings: 'true'` + `TIKA_MODE`) are implemented, with graceful metadata-only
-  fallback when Tika is absent (the default — so CI/sandbox stay green without Java). The remaining
-  candidate depth follow-up is to wire that per-filing second fetch into the worker parse path when
-  full-filing search is needed.
+- **SEC full filing-text extraction — RESOLVED 2026-07-12** (ADR 0039). The single fetch role retrieves
+  primary filings when Tika is configured, preserves each as immutable raw evidence with origin/parser
+  provenance, and enqueues network-free FilingParser work. Search/enrichment receive the full text;
+  absent Tika or any secondary error falls back to metadata.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
-  - `pip-audit` fails *locally* with an `ensurepip` SIGABRT (this sandbox blocks subprocess venv
-    creation) — a local artifact, not a CI condition. The CI `audit` job now audits the locked
-    **third-party** deps via `uv export --no-emit-project` (the unpublishable local `atlascore`
-    package is excluded so `--strict` stays meaningful); it passes green.
+  - `pip-audit --disable-pip` audits the fully pinned exported lock without creating a temporary
+    virtualenv, avoiding the local `ensurepip` SIGABRT while preserving strict vulnerability failure.
   - A *newer local* `detect-secrets` flags the `hashed_secret` hex strings inside `.secrets.baseline`
     itself; CI's pinned version does not — the CI `secrets-scan` job passes green, and no B5 source
     file appears in any finding. The committed `.secrets.baseline` is unchanged from HEAD.
@@ -657,8 +664,7 @@ loop, a periodic restore-drill timer, and a `source_health` history table. None 
 
 - ~~**Python import/packaging layout**~~ — **RESOLVED in B1** (ADR
   [0012](decisions/0012-packaging-layout-src-atlascore.md)): single `src/atlascore` import root.
-- **OSS license at publish** — choose Apache-2.0 or MIT when the repo goes public
-  (`LICENSE` is a proprietary placeholder while private).
+- ~~**OSS license at publish**~~ — **RESOLVED 2026-07-12:** Apache-2.0 (ADR 0040).
 - **Embedding backend + dim for the first deploy** — `EMBEDDING_BACKEND` = `local` |
   `openai` | `google`, with a fixed `EMBEDDING_DIM` per deployment (switching later is a
   documented backfill + reindex). The operator currently lacks a powerful machine, so a cloud

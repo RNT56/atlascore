@@ -89,7 +89,14 @@ def test_search_renders_without_query_or_db() -> None:
 
 
 def test_ui_routes_registered() -> None:
-    paths = {r.path for r in create_app().routes}
+    routes = create_app().routes
+    paths = {path for route in routes if (path := getattr(route, "path", None))}
+    for route in routes:
+        router = getattr(route, "original_router", None)
+        if router is not None:
+            paths.update(
+                path for nested in router.routes if (path := getattr(nested, "path", None))
+            )
     assert {
         "/",
         "/search",
