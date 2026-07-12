@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from atlascore.cli.main import app
@@ -15,7 +16,9 @@ runner = CliRunner()
 def test_summarize_help_exposes_cache_control() -> None:
     result = runner.invoke(app, ["summarize", "--help"])
     assert result.exit_code == 0
-    assert "--cache-only" in result.output
+    # GitHub Actions advertises a colour-capable terminal; Rich may place ANSI
+    # styling sequences inside option names, unlike the default local runner.
+    assert "--cache-only" in unstyle(result.output)
 
 
 def test_summarize_rejects_invalid_uuid_before_database() -> None:
