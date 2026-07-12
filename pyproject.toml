@@ -65,7 +65,7 @@ classifiers = [
 # No external broker, no search cluster, no vector DB, no OLAP — Postgres does it all.
 dependencies = [
     "pydantic>=2.7",          # v2 models; source of truth for migrations (boundary validation)
-    "pydantic-settings>=2.2", # typed settings from environment / .env
+    "pydantic-settings>=2.14.2", # typed settings from environment / .env
     "sqlalchemy>=2.0",        # 2.x ORM/Core for canonical stores + control plane
     "alembic>=1.13",          # migrations for every schema change (postgres only)
     "psycopg[binary]>=3.1",   # PostgreSQL 16 driver (DATABASE_URL uses postgresql+psycopg)
