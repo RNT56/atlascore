@@ -15,14 +15,15 @@ private and must never be committed.
 
 ## Supported versions
 
-AtlasCore is pre-1.0 and ships from the default branch. Security fixes target the
-default branch (`[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md)). There is no
-back-port policy until a tagged release exists.
+AtlasCore is pre-1.0. Security fixes target the default branch (`[Unreleased]` in
+[`CHANGELOG.md`](CHANGELOG.md)) and the latest tagged release when a patch release is warranted.
+Older tags do not receive backports.
 
 | Version | Supported |
 | --- | --- |
-| `main` (unreleased) | Yes |
-| any tagged release | Latest tag only |
+| `main` (next release) | Yes |
+| `v0.1.0` (latest release) | Yes |
+| older tagged releases | No |
 
 ---
 

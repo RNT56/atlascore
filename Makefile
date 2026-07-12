@@ -83,7 +83,10 @@ smoke: ## Local end-to-end smoke: source -> ingest -> enrich -> search -> MCP su
 	$(RUN) pytest -m smoke
 
 audit: ## Dependency vulnerability audit (pip-audit).
-	$(RUN) pip-audit
+	@requirements="$$(mktemp)"; \
+	trap 'rm -f "$$requirements"' EXIT; \
+	$(UV) export --frozen --no-emit-project --format requirements-txt > "$$requirements"; \
+	$(RUN) pip-audit --strict --disable-pip --requirement "$$requirements"
 
 soak-preflight: ## Fail closed unless production config, DB, delivery, heartbeat, and backups are ready.
 	$(RUN) atlas soak preflight

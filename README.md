@@ -12,6 +12,7 @@ agents can safely use.
 ![stack](https://img.shields.io/badge/stack-PostgreSQL_16-336791?style=for-the-badge)
 ![mcp](https://img.shields.io/badge/MCP-read--only-0f766e?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-Apache--2.0-0f766e?style=for-the-badge)
+[![release](https://img.shields.io/github/v/release/RNT56/atlascore?style=for-the-badge&label=release)](https://github.com/RNT56/atlascore/releases/latest)
 
 </div>
 
@@ -28,13 +29,13 @@ and **not** an agent-controlled ingestion system.
 | | |
 |---|---|
 | **Package** | `atlascore` |
-| **Product name** | AtlasCore, formerly AtlasWire |
+| **Product** | AtlasCore |
 | **CLI** | `atlas` |
 | **Primary datastore** | PostgreSQL 16 with `pgvector`, `pg_trgm`, FTS, queue tables, and time-series partitions |
 | **Runtime shape** | Single-box deployment; Docker Compose for stateful infra; systemd or launchd for scheduler/worker |
-| **Current state** | MVP B1-B15 and post-MVP B16-B22 are complete. `main` also includes the first v1 increments. The next operational step is a month-long unattended soak from a pinned clone. |
+| **Current state** | [`v0.1.0`](https://github.com/RNT56/atlascore/releases/tag/v0.1.0) is released. MVP B1-B15, post-MVP B16-B22, and the first v1 increments are complete; the next operational step is a month-long unattended soak from a pinned clone. |
 
-**Fast path:** [Quickstart](#quickstart) · [Pain points](#pain-points-atlascore-solves) · [How it works](#how-it-works) · [Operator surfaces](#operator-surfaces) · [Status](#current-status)
+**Fast path:** [Quickstart](#quickstart) · [Run it](#run-atlascore) · [Full setup guide](docs/getting-started.md) · [Operations](docs/runbooks/README.md) · [How it works](#how-it-works) · [Status](#current-status)
 
 ---
 
@@ -135,7 +136,7 @@ control plane must never depend on MCP, and agents never trigger crawls or chang
 
 ## Quickstart
 
-Prerequisites: Python 3.12+, [`uv`](https://github.com/astral-sh/uv), Docker, and Docker Compose.
+Prerequisites: Python 3.12+, [`uv`](https://docs.astral.sh/uv/getting-started/installation/), Docker, and Docker Compose.
 PostgreSQL 16 with `pgvector` and `pg_trgm` runs in Compose.
 
 ```bash
@@ -146,18 +147,59 @@ cd atlascore
 # 2. Install deps + init local env (copies .env.example -> .env)
 make setup
 
-# 3. Run Postgres 16 + pgvector
+# 3. In .env, replace the example DEFAULT_USER_AGENT contact before live ingestion
+
+# 4. Run Postgres 16 + pgvector
 make dev
 
-# 4. Apply migrations
+# 5. Apply migrations
 make migrate
 
-# 5. Validate and sync the source registry
+# 6. Validate and sync the source registry
 make seed
+
+# 7. Verify the installed CLI and registered sources
+uv run atlas --version
+uv run atlas source list
 ```
 
 Integration and smoke tests need a reachable Postgres 16. They skip cleanly when none is present, so
 `make test` stays useful offline for unit and contract coverage.
+
+The shipped `.env.example` has a writable, gitignored local raw-store path and matching local database
+credentials. Production has stricter requirements. Follow the **[complete setup and run
+guide](docs/getting-started.md)** for environment choices, first ingestion, continuous processes,
+WebUI/API, MCP client configuration, optional backends, verification, deployment, and troubleshooting.
+
+---
+
+## Run AtlasCore
+
+Start the worker in terminal A:
+
+```bash
+uv run atlas worker run
+```
+
+Enqueue an approved keyless source from terminal B:
+
+```bash
+uv run atlas crawl enqueue fed_press_releases
+```
+
+After terminal A has drained fetch → parse → enrich and returned to its idle loop, query the
+processed store:
+
+```bash
+uv run atlas search "Federal Reserve"
+uv run atlas health
+uv run atlas crawl dlq
+```
+
+Stop the worker with `Ctrl-C` after the first run. For continuous operation, run exactly one
+scheduler and one fetch-capable worker using the vetted
+[systemd](infra/systemd/README.md) or [launchd](infra/launchd/README.md) definitions. For an offline,
+deterministic end-to-end proof, use `make smoke` with PostgreSQL running.
 
 ---
 
@@ -168,27 +210,27 @@ Integration and smoke tests need a reachable Postgres 16. They skip cleanly when
 `atlas` is the only ingestion-management surface.
 
 ```bash
-atlas source validate --all          # validate source YAML
-atlas source sync --all              # mirror approved sources into Postgres
-atlas source test <source_id>        # dry-run policy + connector checks
-atlas crawl once <source_id>         # enqueue/run one manual fetch
-atlas crawl dlq                      # inspect dead jobs
-atlas crawl requeue <job_id>         # recover a dead job
-atlas parse <raw_id>                 # re-parse immutable raw
-atlas enrich <doc_id>                # run enrichment for one document
-atlas search "query terms"           # full-text search with provenance
-atlas summarize <doc_id>...          # return/pre-warm a cited summary; --cache-only supported
-atlas alerts run                     # evaluate and deliver alerts
-atlas alerts ack <alert_id>          # acknowledge an alert
-atlas health                         # source health + DLQ + liveness
-atlas digest                         # daily digest via delivery channel
-atlas backup                         # local pg_dump + raw-store copy
-atlas purge <doc_id|entity_id>       # audited erasure cascade
-atlas reindex-embeddings             # bounded embedding backfill/reindex
-atlas scheduler run                  # exactly-one scheduler loop
-atlas worker run                     # continuous fetch/parse/enrich drain loop
-atlas mcp dev                        # read-only MCP server over stdio
-atlas soak preflight --send-probes   # fail-closed production/soak readiness gate
+uv run atlas source validate --all          # validate source YAML
+uv run atlas source sync --all              # mirror approved sources into Postgres
+uv run atlas source test <source_id>        # dry-run policy + connector checks
+uv run atlas crawl once <source_id>         # enqueue/run one manual fetch
+uv run atlas crawl dlq                      # inspect dead jobs
+uv run atlas crawl requeue <job_id>         # recover a dead job
+uv run atlas parse <raw_id>                 # re-parse immutable raw
+uv run atlas enrich <doc_id>                # run enrichment for one document
+uv run atlas search "query terms"           # full-text search with provenance
+uv run atlas summarize <doc_id>...          # return/pre-warm a cited summary; --cache-only supported
+uv run atlas alerts run                     # evaluate and deliver alerts
+uv run atlas alerts ack <alert_id>          # acknowledge an alert
+uv run atlas health                         # source health + DLQ + liveness
+uv run atlas digest                         # daily digest via delivery channel
+uv run atlas backup                         # local pg_dump + raw-store copy
+uv run atlas purge <doc_id|entity_id>       # audited erasure cascade
+uv run atlas reindex-embeddings             # bounded embedding backfill/reindex
+uv run atlas scheduler run                  # exactly-one scheduler loop
+uv run atlas worker run                     # continuous fetch/parse/enrich drain loop
+uv run atlas mcp dev                        # read-only MCP server over stdio
+uv run atlas soak preflight --send-probes   # fail-closed production/soak readiness gate
 ```
 
 ### Read-only WebUI and JSON API
@@ -197,7 +239,7 @@ Install the web extra and bind to loopback:
 
 ```bash
 uv sync --extra web
-uvicorn atlascore.api.app:app --host 127.0.0.1 --port 8000
+uv run uvicorn atlascore.api.app:app --host 127.0.0.1 --port 8000
 ```
 
 Routes:
@@ -236,7 +278,7 @@ Postgres integration on every pull request and push.
 
 ```text
 atlascore/
-  README.md  CLAUDE.md  CHANGELOG.md  CONTRIBUTING.md  SECURITY.md  LICENSE
+  README.md  CHANGELOG.md  CONTRIBUTING.md  SECURITY.md  LICENSE
   .env.example  .pre-commit-config.yaml  pyproject.toml  uv.lock  Makefile
   .github/        workflows/ci.yml, dependabot.yml
   sources/        Git-tracked source registry YAML
@@ -259,10 +301,8 @@ atlascore/
   migrations/          Alembic migrations
   infra/               Compose, backup, systemd, launchd, restore drill
   tests/               unit, integration, fixtures
-  docs/                architecture, connectors, schemas, security, compliance, MCP, runbooks, ADRs
+  docs/                getting started, architecture, connectors, schemas, security, compliance, MCP, runbooks, ADRs
 ```
-
-Rule: do not add top-level directories without a clear reason.
 
 ---
 
@@ -270,7 +310,10 @@ Rule: do not add top-level directories without a clear reason.
 
 | Document | Purpose |
 |---|---|
-| [`CLAUDE.md`](CLAUDE.md) | Agent operating contract: identity, boundaries, rituals, architecture, MCP tools, security, compliance, and definition of done. |
+| **[`docs/getting-started.md`](docs/getting-started.md)** | Complete installation, configuration, first ingestion, continuous runtime, WebUI/API, MCP, optional backends, verification, deployment handoff, and troubleshooting. |
+| **[`docs/runbooks/README.md`](docs/runbooks/README.md)** | Production/soak preflight, deployment, backup/restore, purge, DLQ, health, secrets, reindexing, and recovery procedures. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Development setup, quality gates, testing layers, source workflow, and contribution rules. |
+| [`SECURITY.md`](SECURITY.md) | Supported versions, private vulnerability reporting, threat summary, and reporting expectations. |
 | [`docs/STATUS.md`](docs/STATUS.md) | Living board: current phase, done, next, known issues, and coordination protocol. |
 | [`docs/PROJECT-PLAN.md`](docs/PROJECT-PLAN.md) | Point-in-time rationale, roadmap, MVP backlog, source categories, risks, and cost model. |
 | [`docs/architecture/README.md`](docs/architecture/README.md) | Components, data flow, concurrency, degradation, and control-plane boundaries. |
@@ -279,14 +322,13 @@ Rule: do not add top-level directories without a clear reason.
 | [`docs/security/README.md`](docs/security/README.md) | SSRF, URL safety, sanitization, secrets, sandboxing, and prompt-injection posture. |
 | [`docs/compliance/README.md`](docs/compliance/README.md) | Internal-only posture, PII framing, retention, attribution, and code-not-data boundary. |
 | [`docs/mcp/README.md`](docs/mcp/README.md) | The seven read-oriented MCP tools and their contracts. |
-| [`docs/runbooks/README.md`](docs/runbooks/README.md) | Deploy, backup/restore, purge, backfill/reindex, secrets, and recovery procedures. |
-| [`docs/decisions/`](docs/decisions/) | ADRs `0000` through `0037`. |
+| [`docs/decisions/`](docs/decisions/) | ADRs `0000` through `0040`. |
 
 ---
 
 ## Current status
 
-MVP **B1-B15** and the post-MVP cycle **B16-B22** are complete. `main` also includes the first v1
+Release **v0.1.0**, MVP **B1-B15**, and the post-MVP cycle **B16-B22** are complete. `main` also includes the first v1
 increments: ECB, arXiv, GitHub releases/advisories, Eurostat, optional SOPS/age deploy secrets, DLQ
 requeue, read-only JSON API + server-rendered WebUI, literal-IP/SNI SSRF pinning, and fully wired SEC
 primary-filing ingestion through sandboxed Tika.
