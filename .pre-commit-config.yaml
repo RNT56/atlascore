@@ -12,29 +12,24 @@ default_language_version:
   python: python3.12
 
 repos:
-  # --- ruff: format + lint (the single formatter/linter) ------------------
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.7
+  # --- project tools: use the exact locked environment exercised by CI ----
+  - repo: local
     hooks:
-      - id: ruff
+      - id: ruff-lint
         name: ruff lint (autofix)
-        args: ["--fix"]
+        entry: uv run --locked --all-extras ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
       - id: ruff-format
         name: ruff format
-
-  # --- mypy: light static typing (full strict run lives in CI) ------------
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.1
-    hooks:
+        entry: uv run --locked --all-extras ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
       - id: mypy
-        name: mypy (light)
-        # Light pass at commit time: type the source packages/apps, skip the
-        # heavy strict gate (CI runs the full strict mypy).
-        args: ["--ignore-missing-imports", "--no-strict-optional"]
-        files: ^src/
-        additional_dependencies:
-          - pydantic>=2.7
-          - types-pyyaml>=6.0
+        name: mypy (strict, locked)
+        entry: uv run --locked --all-extras mypy
+        language: system
+        pass_filenames: false
 
   # --- detect-secrets: block secrets/tokens from entering the repo --------
   - repo: https://github.com/Yelp/detect-secrets
@@ -49,7 +44,7 @@ repos:
 
   # --- pre-commit-hooks: hygiene ------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
@@ -57,6 +52,8 @@ repos:
       - id: check-yaml
         # Source registry YAML + compose + workflows must parse.
       - id: check-json
+        # These fixtures deliberately exercise invalid upstream responses.
+        exclude: ^tests/fixtures/(eurostat|github)/malformed\.json$
       - id: check-added-large-files
         args: ["--maxkb=512"]
       - id: check-merge-conflict

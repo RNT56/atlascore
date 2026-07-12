@@ -53,7 +53,7 @@ def _highlight(snippet: str | None) -> Markup:
     safe = safe.replace("«", "<mark>").replace("»", "</mark>")
     # Safe by construction: the snippet was HTML-escaped first, so the ONLY markup is the <mark>
     # tags we inject for the FTS «…» delimiters. Asserted by test_highlight_escapes_untrusted_then_marks.
-    return Markup(safe)  # noqa: S704
+    return Markup(safe)  # noqa: S704 - escaped before the controlled mark tags are injected
 
 
 def _dt(value: datetime | None) -> str:
@@ -91,7 +91,7 @@ def _sparkline(points: list[Any], *, width: int = 600, height: int = 80) -> Mark
     )
     # Safe by construction: width/height are int constants and every coordinate is a formatted
     # float — no user/external string enters the SVG. Asserted by test_sparkline_is_numeric_only_svg.
-    return Markup(  # noqa: S704
+    return Markup(  # noqa: S704 - only numeric constants and computed float coordinates
         f'<svg class="spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none" '
         f'role="img" aria-label="series sparkline">'
         f'<polyline fill="none" stroke="currentColor" stroke-width="1.5" points="{coords}"/></svg>'

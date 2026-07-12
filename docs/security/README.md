@@ -204,7 +204,7 @@ Risky files/attachments are size- and MIME-checked before being handed to a pars
 
 There is **no HTML/browser source in the MVP (B1-B15)**, so no Playwright sandbox is wired into the default pipeline yet; this section is the contract for the day one is approved.
 
-**Tika — as-built (B22, [ADR 0033](../decisions/0033-b22-sec-full-filing-sandboxed-tika.md)).** `security.sandbox.tika` makes the §8 contract concrete for SEC full-filing extraction. `subprocess` mode runs `java -jar tika-app.jar --text` with: a `preexec_fn` applying `RLIMIT_AS` (`TIKA_RLIMIT_AS_BYTES`, default 1 GiB) + `RLIMIT_CPU` (`TIKA_RLIMIT_CPU_SECONDS`, default 60s); a wall-clock `TIKA_TIMEOUT_SECONDS`; fixed argv with **no shell**; piped stdin / capped stdout (`TIKA_MAX_BYTES`); **no network** (file-in/text-out). `server` mode targets a **localhost** `tika-server` only. Run the JVM **non-root** in deployment (systemd `User=`/a dedicated account). `tika_available()` gates every call (jar+`java` present, or a server URL); `TIKA_MODE=none` (default) means filings stay metadata-only, so CI and the sandbox never invoke Java. When the SEC connector's `extract_filing(...)` helper is called, the filing is fetched through the same SSRF-guarded fetcher (PDF/HTML MIME allowlist) before extraction, and any failure falls back to metadata. The default soak/CI parse path remains metadata-only until that second fetch is deliberately wired.
+**Tika — as-built (B22 + [ADR 0039](../decisions/0039-secondary-entry-raw-provenance-and-sec-filings.md)).** `security.sandbox.tika` makes the §8 contract concrete for SEC full-filing extraction. `subprocess` mode runs `java -jar tika-app.jar --text` with `RLIMIT_AS` + `RLIMIT_CPU`, wall-clock and output caps, fixed argv/no shell, and file-in/text-out operation; `server` mode is localhost-only. When `extract_filings=true` and Tika is available, the single fetch worker retrieves each primary filing through the SSRF-pinned fetcher, stores it as immutable raw evidence with origin/parser provenance, and enqueues local-only Tika parsing. Any unavailable or failed secondary fetch falls back to metadata.
 
 ---
 
@@ -334,7 +334,7 @@ B15 ships prompt-injection regression fixtures (a feed item / filing carrying in
 - **Secrets scan** in CI and pre-commit: `gitleaks` / `detect-secrets` (repo content only — runtime data is covered by `sanitize_for_storage`, section 7.3).
 - Pre-commit also runs `ruff` (format + lint), light `mypy`, `end-of-file-fixer`, `trailing-whitespace`, `check-yaml`, `check-json`.
 - CI matrix: Python 3.12; **no live network** in unit/contract tests.
-- No image-signing/SBOM ceremony unless explicitly wanted.
+- CI builds release artifacts and can export the locked dependency graph as CycloneDX; image signing remains out of scope because AtlasCore does not publish a container image.
 
 ---
 

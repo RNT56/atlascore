@@ -12,10 +12,13 @@ crash can't lose the claim and ``fail()`` always runs in a clean transaction.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from atlascore.connectors_sdk.base import OutputKind
@@ -27,8 +30,9 @@ from atlascore.parsers.article import ArticleParser
 from atlascore.schemas import SCHEMA_VERSION
 from atlascore.schemas.crawl_job import JobType
 from atlascore.schemas.document import DocumentRecord
+from atlascore.security.sanitization import strip_html
 from atlascore.storage.documents import upsert_document
-from atlascore.storage.postgres.models import CrawlJob, RawDocument, Source
+from atlascore.storage.postgres.models import CrawlJob, Document, RawDocument, Source
 from atlascore.storage.queue import claim_next, complete, enqueue, fail
 from atlascore.storage.rawstore import RawStore
 from atlascore.worker.run import load_connector
@@ -42,6 +46,60 @@ class ParseJobResult:
     documents_updated: int
     documents_unchanged: int
     error: str | None = None
+
+
+class _ParsedLocalContent(Protocol):
+    body_text: str
+    parser_version: str
+
+
+class _LocalContentParser(Protocol):
+    def parse(self, data: bytes, *, content_type: str | None = None) -> _ParsedLocalContent: ...
+
+
+def _load_local_content_parser(ref: str) -> _LocalContentParser:
+    module_path, _, class_name = ref.partition(":")
+    if not module_path or not class_name:
+        raise ConfigError(f"invalid local parser ref {ref!r} (expected 'module.path:ClassName')")
+    cls = getattr(importlib.import_module(module_path), class_name)
+    return cast("_LocalContentParser", cls())
+
+
+def build_fetched_entry_record(
+    source: Source,
+    raw_doc: RawDocument,
+    raw_bytes: bytes,
+    *,
+    payload: dict[str, object],
+    clock: Clock,
+    parser: _LocalContentParser | None = None,
+) -> DocumentRecord:
+    """Parse a secondary entry payload stored by the fetch worker, with no source I/O."""
+    parser_ref = str(payload.get("parser_ref") or raw_doc.parser_ref or "")
+    if not parser_ref:
+        raise ConfigError("secondary parse job has no parser_ref")
+    local_parser = parser or _load_local_content_parser(parser_ref)
+    parsed = local_parser.parse(raw_bytes, content_type=raw_doc.mime_type)
+    guid = str(payload.get("guid") or raw_doc.id)
+    title_value = payload.get("title")
+    title = strip_html(str(title_value)) if title_value else None
+    link_value = payload.get("link") or raw_doc.origin_url
+    canonical_url = str(link_value) if link_value else None
+    published_value = payload.get("published_at")
+    published = datetime.fromisoformat(str(published_value)) if published_value else None
+    fingerprint = f"{guid}\n{title or ''}\n\n{parsed.body_text}".encode()
+    return DocumentRecord(
+        source_id=source.id,
+        raw_document_id=raw_doc.id,
+        canonical_url=canonical_url,
+        title=title,
+        body_text=parsed.body_text or None,
+        published_at=published,
+        parsed_at=clock.now(),
+        content_hash=content_hash(fingerprint),
+        parser_version=parsed.parser_version,
+        schema_version=SCHEMA_VERSION,
+    )
 
 
 def build_document_records(
@@ -151,9 +209,18 @@ def run_parse_job(
     if source is None:
         raise ConfigError(f"source {job.source_id} not found")
     raw_bytes = raw_store.get(raw_doc.path)
-    records = build_document_records(
-        source, raw_doc, raw_bytes, clock=clock, only_guid=payload.get("guid")
-    )
+    parser_ref = payload.get("parser_ref") or raw_doc.parser_ref
+    if parser_ref:
+        typed_payload = {str(key): value for key, value in payload.items()}
+        records = [
+            build_fetched_entry_record(
+                source, raw_doc, raw_bytes, payload=typed_payload, clock=clock
+            )
+        ]
+    else:
+        records = build_document_records(
+            source, raw_doc, raw_bytes, clock=clock, only_guid=payload.get("guid")
+        )
     return _persist(session, records, clock=clock)
 
 
@@ -213,5 +280,24 @@ def reparse_raw_document(
         if source is None:
             raise ConfigError(f"source {raw_doc.source_id} not found")
         raw_bytes = raw_store.get(raw_doc.path)
-        records = build_document_records(source, raw_doc, raw_bytes, clock=clock)
+        if raw_doc.parser_ref:
+            existing = session.scalar(
+                select(Document).where(Document.raw_document_id == raw_doc.id).limit(1)
+            )
+            payload: dict[str, object] = {
+                "guid": str(existing.id) if existing is not None else str(raw_doc.id),
+                "link": existing.canonical_url if existing is not None else raw_doc.origin_url,
+                "title": existing.title if existing is not None else None,
+                "published_at": (
+                    existing.published_at.isoformat()
+                    if existing is not None and existing.published_at is not None
+                    else None
+                ),
+                "parser_ref": raw_doc.parser_ref,
+            }
+            records = [
+                build_fetched_entry_record(source, raw_doc, raw_bytes, payload=payload, clock=clock)
+            ]
+        else:
+            records = build_document_records(source, raw_doc, raw_bytes, clock=clock)
         return _persist(session, records, clock=clock)

@@ -32,12 +32,12 @@ include = ["src/atlascore", "migrations", "alembic.ini", "README.md", "LICENSE"]
 
 [project]
 name = "atlascore"
-version = "0.0.0"
+version = "0.1.0"
 description = "A governed, single-operator data fabric for your own agents and dashboards."
 readme = "README.md"
 requires-python = ">=3.12"
-# LICENSE is a proprietary/all-rights-reserved placeholder while the repo is
-# private; switch to Apache-2.0 or MIT at publish (see LICENSE).
+# AtlasCore's code is published under Apache-2.0. Harvested data and credentials
+# remain outside the repository and are not distributed with the package.
 license = { file = "LICENSE" }
 authors = [{ name = "AtlasCore (single operator)" }]
 keywords = [
@@ -50,10 +50,10 @@ keywords = [
     "internal-only",
 ]
 classifiers = [
-    "Private :: Do Not Upload",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Intended Audience :: Developers",
@@ -65,12 +65,12 @@ classifiers = [
 # No external broker, no search cluster, no vector DB, no OLAP — Postgres does it all.
 dependencies = [
     "pydantic>=2.7",          # v2 models; source of truth for migrations (boundary validation)
-    "pydantic-settings>=2.2", # typed settings from environment / .env
+    "pydantic-settings>=2.14.2", # typed settings from environment / .env; security floor
     "sqlalchemy>=2.0",        # 2.x ORM/Core for canonical stores + control plane
     "alembic>=1.13",          # migrations for every schema change (postgres only)
     "psycopg[binary]>=3.1",   # PostgreSQL 16 driver (DATABASE_URL uses postgresql+psycopg)
     "pgvector>=0.3",          # vector(N) column + ANN index support (single active dim per deploy)
-    "httpx>=0.27",            # async/sync HTTP fetcher (timeouts, retries, conditional requests)
+    "httpx>=0.28.1",          # fetcher + explicit-IP/SNI pinning extension
     "feedparser>=6.0",        # RSS/Atom parsing (ETag / Last-Modified aware)
     "trafilatura>=1.9",       # primary article extraction (fallback parsers added per connector)
     "nh3>=0.2",               # HTML sanitizer (ammonia/HTML5 tokenizer) — the security boundary for body text
@@ -102,6 +102,7 @@ local-embeddings = [
 cloud = [
     "openai>=1.30",
     "google-genai>=0.3",
+    "cryptography>=48.0.1", # transitive security floor for cloud auth stacks
 ]
 
 # Hosted LLM summary backends (LLM_BACKEND=api). Same cloud-egress caveat as above;
@@ -117,6 +118,8 @@ web = [
     "fastapi>=0.111",
     "uvicorn>=0.30",
     "jinja2>=3.1",        # server-rendered WebUI templates (no JS build step)
+    "starlette>=1.3.1",    # transitive security floor for the HTTP surface
+    "python-multipart>=0.0.31", # transitive security floor used by FastAPI/MCP stacks
 ]
 
 # Optional single-binary external search (only if Postgres FTS is outgrown).
@@ -132,7 +135,7 @@ dev = [
     "pytest-cov>=5.0",
     "respx>=0.21",        # mock httpx for connector contract tests (no live network in unit)
     "vcrpy>=6.0",         # record/replay cassettes for opt-in live-source tests
-    "pip-audit>=2.7",     # dependency vulnerability audit (CI + local)
+    "pip-audit>=2.10",    # dependency vulnerability audit (CI + local)
     "pre-commit>=3.7",    # local hook runner (mirrors CI gates)
     "detect-secrets>=1.5",# secrets baseline + scan (repo-side; pairs with sanitize_for_storage)
     "types-pyyaml>=6.0",  # type stubs for mypy
@@ -144,10 +147,11 @@ dev = [
 atlas = "atlascore.cli.main:app"
 
 [project.urls]
-# Private repo for now; published as code-not-data later. Placeholders until then.
-Homepage = "https://example.invalid/atlascore"
-Documentation = "https://example.invalid/atlascore/docs"
-Repository = "https://example.invalid/atlascore"
+# Public code-not-data project metadata.
+Homepage = "https://github.com/RNT56/atlascore"
+Documentation = "https://github.com/RNT56/atlascore/tree/main/docs"
+Repository = "https://github.com/RNT56/atlascore"
+Issues = "https://github.com/RNT56/atlascore/issues"
 
 # ---------------------------------------------------------------------------
 # uv configuration
@@ -196,7 +200,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may use assert and bind to all interfaces in fixtures; allow noisier patterns.
-"tests/**/*.py" = ["S101", "S104", "S105", "S106", "S311", "T20"]
+"tests/**/*.py" = ["E402", "S101", "S104", "S105", "S106", "S311", "T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["atlascore"]

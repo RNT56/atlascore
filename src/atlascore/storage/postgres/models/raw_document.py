@@ -46,6 +46,10 @@ class RawDocument(Base):
     http_status: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     etag: Mapped[str | None] = mapped_column(Text(), nullable=True)
     last_modified: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # Final public fetch URL and the local parser for secondary entry payloads (for example an SEC
+    # primary filing). Both are provenance/configuration, never a credential-bearing URL.
+    origin_url: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    parser_ref: Mapped[str | None] = mapped_column(Text(), nullable=True)
     schema_version: Mapped[int] = mapped_column(Integer(), nullable=False, default=1)
 
     __table_args__ = (Index("ix_raw_document_source_id_fetched_at", "source_id", "fetched_at"),)

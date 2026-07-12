@@ -37,6 +37,8 @@ class RawDocumentContent:
     source_id: UUID
     source_name: str
     canonical_url: str | None
+    origin_url: str | None = None
+    parser_ref: str | None = None
 
 
 def get_raw_document_content(
@@ -67,7 +69,7 @@ def get_raw_document_content(
         return None
 
     # If only a raw_document_id was given, surface a representative document's canonical_url.
-    canonical_url = document.canonical_url if document is not None else None
+    canonical_url = document.canonical_url if document is not None else raw.origin_url
     if document is None:
         canonical_url = session.scalar(
             select(Document.canonical_url)
@@ -91,4 +93,6 @@ def get_raw_document_content(
         source_id=source.id,
         source_name=source.name,
         canonical_url=canonical_url,
+        origin_url=raw.origin_url,
+        parser_ref=raw.parser_ref,
     )

@@ -20,4 +20,4 @@ __all__ = ["__version__"]
 
 # Kept in sync with [project].version in pyproject.toml. The installed
 # distribution version is the runtime source of truth (see atlascore.cli.main).
-__version__ = "0.0.0"
+__version__ = "0.1.0"

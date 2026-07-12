@@ -21,7 +21,73 @@ def _public_resolver(_host: str) -> list[str]:
 
 
 def _fetcher(resolver: Callable[[str], list[str]] = _public_resolver) -> SafeFetcher:
-    return SafeFetcher(client=httpx.Client(), resolver=resolver)
+    return SafeFetcher(client=httpx.Client(), resolver=resolver, pin_connections=False)
+
+
+@pytest.mark.security
+def test_https_connection_is_pinned_with_host_and_sni_preserved() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            content=b"ok",
+            headers={"content-type": "text/plain"},
+            request=request,
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        out = SafeFetcher(
+            client=client,
+            resolver=lambda _host: ["93.184.216.34"],
+        ).fetch("https://feed.test:8443/path?q=1", extra_headers={"Host": "evil.test"})
+
+    assert out.final_url == "https://feed.test:8443/path?q=1"
+    assert seen[0].url == httpx.URL("https://93.184.216.34:8443/path?q=1")
+    assert seen[0].headers["Host"] == "feed.test:8443"
+    assert seen[0].extensions["sni_hostname"] == "feed.test"
+
+
+@pytest.mark.security
+def test_pinned_connection_falls_back_across_validated_addresses() -> None:
+    attempted: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempted.append(request.url.host)
+        if request.url.host == "93.184.216.34":
+            raise httpx.ConnectError("unreachable", request=request)
+        return httpx.Response(200, content=b"ok", request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        out = SafeFetcher(
+            client=client,
+            resolver=lambda _host: ["93.184.216.34", "8.8.8.8"],
+        ).fetch("https://feed.test/path")
+
+    assert out.content == b"ok"
+    assert attempted == ["93.184.216.34", "8.8.8.8"]
+
+
+@pytest.mark.security
+def test_pinned_relative_redirect_revalidates_public_url() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "/final"}, request=request)
+        return httpx.Response(200, content=b"done", request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        out = SafeFetcher(
+            client=client,
+            resolver=lambda _host: ["93.184.216.34"],
+        ).fetch("https://feed.test/start")
+
+    assert out.final_url == "https://feed.test/final"
+    assert [request.url.path for request in seen] == ["/start", "/final"]
+    assert all(request.headers["Host"] == "feed.test" for request in seen)
 
 
 @respx.mock

@@ -24,7 +24,7 @@ def test_healthz_no_db() -> None:
 
 
 def test_routes_are_read_only_surface() -> None:
-    paths = {r.path for r in create_app().routes}
+    paths = {path for route in create_app().routes if (path := getattr(route, "path", None))}
     assert {"/healthz", "/v1/search", "/v1/alerts", "/v1/sources/health"} <= paths
 
 

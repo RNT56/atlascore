@@ -83,6 +83,7 @@ def _fetcher() -> SafeFetcher:
         clock=FixedClock(NOW),
         resolver=lambda _host: ["93.184.216.34"],
         sleep=lambda _s: None,
+        pin_connections=False,
     )
 
 
@@ -169,3 +170,84 @@ def test_sec_and_nvd_documents_are_searchable(migrated_engine: Engine, tmp_path:
     finally:
         if ids:
             _cleanup(migrated_engine, ids)
+
+
+@respx.mock
+def test_sec_primary_filings_are_stored_and_parsed_without_parse_worker_network(
+    migrated_engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import atlascore.connectors.sec.submissions as sec_mod
+    import atlascore.worker.parse as parse_mod
+    from atlascore.parsers.filing import ParsedFiling
+
+    monkeypatch.setattr(sec_mod, "tika_available", lambda: True)
+
+    class _FakeParser:
+        def parse(self, data: bytes, *, content_type: str | None = None) -> ParsedFiling:
+            return ParsedFiling(body_text=f"Extracted primary filing {data.decode()}.")
+
+    monkeypatch.setattr(parse_mod, "_load_local_content_parser", lambda _ref: _FakeParser())
+    respx.get(url__regex=r"https://data\.sec\.gov/submissions/.*").mock(
+        return_value=httpx.Response(
+            200, content=SEC_JSON, headers={"content-type": "application/json"}
+        )
+    )
+
+    def filing_response(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=request.url.path.encode(),
+            headers={"content-type": "text/html"},
+        )
+
+    respx.get(url__regex=r"https://www\.sec\.gov/Archives/edgar/data/.*").mock(
+        side_effect=filing_response
+    )
+    configured = dict(SEC_YAML)
+    configured["id"] = "sec_full_filing_test"
+    configured["name"] = "SEC Full Filing Test"
+    configured["fetch"] = {
+        **SEC_YAML["fetch"],
+        "params": {"cik": "320193", "extract_filings": "true"},
+    }
+    raw_store = RawStore(tmp_path)
+    source_id: UUID | None = None
+    try:
+        with Session(migrated_engine) as session, session.begin():
+            upsert_source(session, SourceYAML.model_validate(configured).to_record())
+        with Session(migrated_engine) as session:
+            source = get_source(session, "sec_full_filing_test")
+            assert source is not None
+            source_id = source.id
+        with Session(migrated_engine) as session, session.begin():
+            enqueue(
+                session,
+                source_id=source_id,
+                job_type=JobType.FETCH,
+                dedupe_key="fetch:sec-full-filing:1",
+                scheduled_at=NOW,
+            )
+        fetched = run_one_fetch(
+            migrated_engine, fetcher=_fetcher(), raw_store=raw_store, clock=FixedClock(NOW)
+        )
+        assert fetched is not None and fetched.error is None
+        _drain_parse(migrated_engine, raw_store, FixedClock(NOW))
+
+        with Session(migrated_engine) as session:
+            raw_rows = session.scalars(
+                select(RawDocument).where(RawDocument.source_id == source_id)
+            ).all()
+            filing_rows = [row for row in raw_rows if row.parser_ref]
+            assert len(filing_rows) == 3
+            assert all(
+                row.origin_url and "sec.gov/Archives" in row.origin_url for row in filing_rows
+            )
+            documents = session.scalars(
+                select(Document).where(Document.source_id == source_id)
+            ).all()
+            assert len(documents) == 3
+            assert all(doc.parser_version == "filing@1.0.0" for doc in documents)
+            assert all("Extracted primary filing" in (doc.body_text or "") for doc in documents)
+    finally:
+        if source_id is not None:
+            _cleanup(migrated_engine, [source_id])

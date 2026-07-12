@@ -12,7 +12,7 @@
 AtlasCore's compliance story is short because four decisions were made up front and are not negotiable:
 
 1. **Internal-only.** Data is collected for one operator's own agents and dashboards. It is **never redistributed**, resold, syndicated, or published. There is no multi-tenant surface, no public API of harvested data, no export-for-others feature.
-2. **FOSS boundary is code, not data.** The repository may be open-sourced later. Only *code* (connectors, schemas, parsers, SDK) is ever published — **never harvested data and never private credentials**.
+2. **FOSS boundary is code, not data.** Repository code is Apache-2.0. Harvested data, operator configuration, raw stores, backups, and credentials are never published.
 3. **RSS + official/free APIs only.** No browser fleet. No social-platform ingestion. No paywall bypass. This keeps Terms-of-Service and aggregation responsibility with the source/vendor, not with AtlasCore.
 4. **Runs unattended on one box.** Single operator, single VM. No third-party data processors are involved *unless* the operator opts into cloud embeddings/LLM (see §5), which is treated as a deliberate, documented exception with its own caveats.
 
@@ -235,8 +235,8 @@ This keeps "no plaintext secrets in repo" true: what is committed is ciphertext;
 
 - **Publish code, never data.** Connectors, schemas, parsers, and the SDK may be open-sourced. **Harvested data, derived indexes, embeddings, summaries, and credentials are never published.**
 - **No hardcoded private credentials or licensed feeds** in the repository — ever.
-- **Repo is private now.** `LICENSE` is currently a **proprietary / all-rights-reserved placeholder** while the repo is private.
-- **OSS later.** At publish time, switch the license to **Apache-2.0 or MIT** (decided then, recorded in an ADR). Open-source-grade hygiene and CI run from day one (ruff, mypy, pytest, pip-audit, gitleaks/detect-secrets, Dependabot) so the repo is publishable as **code-not-data** at any time.
+- **Public code, private data.** Repository code is licensed under **Apache-2.0** (ADR 0040). Harvested content and deployment state remain internal-only.
+- **Publication gates.** Ruff, mypy, Python 3.12/3.13 tests with coverage, security regressions, dependency audit, package build, secrets scanning, and mandatory PG16 integration protect the code-not-data boundary.
 - **Publishing changes the GDPR picture** (§3.4). Publishing *code* is fine; publishing *results/data derived from the corpus* lapses the household exemption. Keep the two strictly separate.
 
 ---

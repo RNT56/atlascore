@@ -24,6 +24,7 @@ def _fetcher() -> SafeFetcher:
         user_agent="AtlasCore/test",
         resolver=lambda _host: ["93.184.216.34"],
         sleep=lambda _s: None,
+        pin_connections=False,
     )
 
 
@@ -77,3 +78,19 @@ def test_extra_headers_reapplied_across_redirect() -> None:
         URL, extra_headers={"apiKey": "k"}, accept_mime=frozenset({"application/json"})
     )
     assert final.calls.last.request.headers["apiKey"] == "k"  # header survives the hop
+
+
+@respx.mock
+def test_extra_headers_are_stripped_on_cross_origin_redirect() -> None:
+    respx.get(URL).mock(
+        return_value=httpx.Response(302, headers={"location": "https://other.example.test/final"})
+    )
+    final = respx.get("https://other.example.test/final").mock(
+        return_value=httpx.Response(
+            200, content=b"{}", headers={"content-type": "application/json"}
+        )
+    )
+    _fetcher().fetch(
+        URL, extra_headers={"apiKey": "k"}, accept_mime=frozenset({"application/json"})
+    )
+    assert "apiKey" not in final.calls.last.request.headers

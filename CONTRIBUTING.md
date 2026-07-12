@@ -1,8 +1,8 @@
 # Contributing to AtlasCore
 
-> AtlasCore is a governed, single-operator data fabric. It is currently a
-> **private** repository, run with full open-source-grade hygiene from day one
-> so it can be published later as **code, not data**. These conventions apply to
+> AtlasCore is a governed, single-operator data fabric published under Apache-2.0 with a strict
+> **code-not-data** boundary. Harvested content and operator secrets never belong in the repository.
+> These conventions apply to
 > the single human operator and to any AI/automation session.
 
 **Before you change anything, read [`CLAUDE.md`](CLAUDE.md) and

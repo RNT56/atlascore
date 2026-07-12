@@ -339,6 +339,8 @@ def _raw_provenance(content: RawDocumentContent) -> dict[str, Any]:
         "source": content.source_name,
         "source_id": str(content.source_id),
         "canonical_url": content.canonical_url,
+        "origin_url": content.origin_url,
+        "parser_ref": content.parser_ref,
         "fetched_at": content.fetched_at.isoformat() if content.fetched_at else None,
         "content_hash": content.content_hash,
         "http_status": content.http_status,

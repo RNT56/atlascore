@@ -38,6 +38,19 @@ class FeedEntry:
 
 
 @dataclass(frozen=True)
+class FetchedEntryContent:
+    """A secondary immutable payload fetched for one document entry.
+
+    Connectors such as SEC first fetch an index/submissions payload and may then fetch a primary
+    filing. The fetch worker stores this outcome as its own ``raw_document`` and the parse worker
+    invokes ``parser_ref`` locally; no parse worker performs source I/O.
+    """
+
+    outcome: FetchOutcome
+    parser_ref: str
+
+
+@dataclass(frozen=True)
 class Observation:
     """One scalar time-series point (macro ``kind=observation``).
 

@@ -37,7 +37,8 @@ infra/launchd/install.sh
 ```
 
 Verify: `pgrep -af 'atlas scheduler run' | wc -l` (==1), same for the worker, and `atlas health`
-(scheduler + fetch worker "present"). Logs land in `<soak>/var/log/`.
+(scheduler + fetch worker "present"). Daily backup/digest and the weekly disposable restore drill
+are loaded from the same templates. Logs land in `<soak>/var/log/`.
 
 ## Notes / gotchas
 

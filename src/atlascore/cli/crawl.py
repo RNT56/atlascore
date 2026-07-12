@@ -100,7 +100,7 @@ def once_cmd(
                     dedupe_key=f"fetch:{_slug(source)}:once:{clock.now().isoformat()}",
                     scheduled_at=clock.now(),
                 )
-            with httpx.Client() as client:
+            with httpx.Client(trust_env=False) as client:
                 fetcher = SafeFetcher(
                     client=client, clock=clock, user_agent=settings.default_user_agent
                 )

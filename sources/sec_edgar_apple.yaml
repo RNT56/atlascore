@@ -28,3 +28,4 @@ fetch:
   timeout_seconds: 30
   params:
     cik: "320193"             # Apple Inc.; the connector zero-pads to CIK0000320193
+    extract_filings: "true"   # active when TIKA_MODE is configured; metadata fallback otherwise

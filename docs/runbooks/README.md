@@ -17,6 +17,7 @@
 ## Table of Contents
 
 1. [Conventions and Prerequisites](#1-conventions-and-prerequisites)
+1A. [Fail-closed Soak Preflight](#1a-fail-closed-soak-preflight)
 2. [Deploy on One Hetzner VM (Docker Compose + systemd)](#2-deploy-on-one-hetzner-vm-docker-compose--systemd)
 3. [Multi-Worker Operations (exactly one scheduler; one fetch worker)](#3-multi-worker-operations-exactly-one-scheduler-one-fetch-worker)
 4. [Nightly Backup (pg_dump + offsite raw sync)](#4-nightly-backup-pg_dump--offsite-raw-sync)
@@ -95,6 +96,25 @@ resolved at runtime; it is never a secret value.
 - Use minimal, reversible changes; before starting, read `CLAUDE.md` + `docs/STATUS.md` and
   claim a work-area under "In progress"; at close, update `docs/STATUS.md`, `CHANGELOG.md`,
   and add an ADR for any architecture-changing decision.
+
+---
+
+## 1A. Fail-closed Soak Preflight
+
+After filling `.env`, creating `RAW_STORE_DIR`, starting PostgreSQL, and applying migrations, run:
+
+```bash
+atlas soak preflight --send-probes
+```
+
+The command fails unless `APP_ENV=prod`, database credentials and the contact user-agent are no
+longer examples, a real notification channel and heartbeat are configured, PostgreSQL is reachable
+at the current Alembic head, the raw directory exists, `pg_dump`/`pg_restore` are installed, and a
+local plus offsite backup destination is configured. `--send-probes` sends one real notification and
+heartbeat ping. Do not install the scheduler/worker services until every check passes.
+
+Run the backup and restore drill once after preflight; the preflight verifies configuration and tools,
+not the integrity of a particular backup artifact.
 
 ---
 

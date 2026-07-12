@@ -11,7 +11,7 @@ agents can safely use.
 ![scope](https://img.shields.io/badge/scope-single--operator-111827?style=for-the-badge)
 ![stack](https://img.shields.io/badge/stack-PostgreSQL_16-336791?style=for-the-badge)
 ![mcp](https://img.shields.io/badge/MCP-read--only-0f766e?style=for-the-badge)
-![license](https://img.shields.io/badge/license-private-7f1d1d?style=for-the-badge)
+![license](https://img.shields.io/badge/license-Apache--2.0-0f766e?style=for-the-badge)
 
 </div>
 
@@ -139,8 +139,8 @@ Prerequisites: Python 3.12+, [`uv`](https://github.com/astral-sh/uv), Docker, an
 PostgreSQL 16 with `pgvector` and `pg_trgm` runs in Compose.
 
 ```bash
-# 1. Clone (private repo for now)
-git clone <your-remote>/atlascore.git
+# 1. Clone
+git clone https://github.com/RNT56/atlascore.git
 cd atlascore
 
 # 2. Install deps + init local env (copies .env.example -> .env)
@@ -177,6 +177,7 @@ atlas crawl requeue <job_id>         # recover a dead job
 atlas parse <raw_id>                 # re-parse immutable raw
 atlas enrich <doc_id>                # run enrichment for one document
 atlas search "query terms"           # full-text search with provenance
+atlas summarize <doc_id>...          # return/pre-warm a cited summary; --cache-only supported
 atlas alerts run                     # evaluate and deliver alerts
 atlas alerts ack <alert_id>          # acknowledge an alert
 atlas health                         # source health + DLQ + liveness
@@ -187,6 +188,7 @@ atlas reindex-embeddings             # bounded embedding backfill/reindex
 atlas scheduler run                  # exactly-one scheduler loop
 atlas worker run                     # continuous fetch/parse/enrich drain loop
 atlas mcp dev                        # read-only MCP server over stdio
+atlas soak preflight --send-probes   # fail-closed production/soak readiness gate
 ```
 
 ### Read-only WebUI and JSON API
@@ -220,11 +222,13 @@ make test          # unit + contract + integration when DB is reachable
 make security      # SSRF, sanitizer, secrets, prompt-injection regressions
 make smoke         # source -> ingest -> enrich -> search -> MCP summary -> alert -> backup -> purge
 make audit         # dependency vulnerability audit
+make soak-preflight # fail-closed production/soak readiness check
 make precommit     # all local hooks
 ```
 
-CI mirrors the same posture: formatting, linting, strict typing, unit/contract tests, migration
-checks, source YAML validation, secrets scanning, dependency audit, and optional Postgres integration.
+CI mirrors the same posture: formatting, linting, strict typing, Python 3.12/3.13 unit coverage,
+security regressions, package builds, migration/source/secrets/dependency gates, and mandatory
+Postgres integration on every pull request and push.
 
 ---
 
@@ -284,7 +288,8 @@ Rule: do not add top-level directories without a clear reason.
 
 MVP **B1-B15** and the post-MVP cycle **B16-B22** are complete. `main` also includes the first v1
 increments: ECB, arXiv, GitHub releases/advisories, Eurostat, optional SOPS/age deploy secrets, DLQ
-requeue, and the read-only JSON API + server-rendered WebUI.
+requeue, read-only JSON API + server-rendered WebUI, literal-IP/SNI SSRF pinning, and fully wired SEC
+primary-filing ingestion through sandboxed Tika.
 
 The full path is implemented: approved source -> ingest -> immutable raw -> parse -> enrich -> search
 -> MCP summary -> alert -> backup -> purge. `make smoke` proves the chain when Postgres is available;
@@ -292,12 +297,13 @@ The full path is implemented: approved source -> ingest -> immutable raw -> pars
 
 Scope discipline still matters. The live-board plan keeps the unattended soak isolated in a pinned
 clone while v1 work lands on `main`. The next operational step is to configure the box, set delivery
-and heartbeat, prove backups restore, deploy one scheduler and one worker, and let the soak run.
+and heartbeat, prove backups restore, run `atlas soak preflight --send-probes`, deploy one scheduler
+and one worker, and let the soak run.
 
 ---
 
 ## License
 
-Private repository, all rights reserved. The `LICENSE` file is a proprietary placeholder while the
-repo is private. The intended public boundary is **code, not data**: publish connectors, schemas, and
-code later, but never harvested data or private credentials.
+AtlasCore code is licensed under [Apache License 2.0](LICENSE). The public boundary is **code, not
+data**: harvested payloads, normalized data, operator configuration, backups, and credentials are
+never distributed with the project.

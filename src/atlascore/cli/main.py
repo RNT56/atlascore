@@ -25,7 +25,9 @@ from atlascore.cli.purge import purge_cmd
 from atlascore.cli.reindex import reindex_embeddings_cmd
 from atlascore.cli.scheduler import scheduler_app
 from atlascore.cli.search import search_cmd
+from atlascore.cli.soak import soak_app
 from atlascore.cli.source import source_app
+from atlascore.cli.summarize import summarize_cmd
 from atlascore.cli.worker import worker_app
 
 app = typer.Typer(
@@ -42,9 +44,11 @@ app.add_typer(tsp_app, name="tsp")
 app.add_typer(scheduler_app, name="scheduler")
 app.add_typer(worker_app, name="worker")
 app.add_typer(mcp_app, name="mcp")
+app.add_typer(soak_app, name="soak")
 app.command(name="parse")(parse_raw)
 app.command(name="enrich")(enrich_cmd)
 app.command(name="search")(search_cmd)
+app.command(name="summarize")(summarize_cmd)
 app.command(name="health")(health_cmd)
 app.command(name="digest")(digest_cmd)
 app.command(name="backup")(backup_cmd)

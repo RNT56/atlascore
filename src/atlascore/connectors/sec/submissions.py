@@ -6,11 +6,11 @@ GUID, the primary-document URL = link, form + company = title, a short descripti
 shared `ArticleParser` then produces the sanitized `document` body, so filings are searchable via
 ``search_documents``.
 
-**Full-filing extraction foundation (B22, opt-in).** :meth:`extract_filing` can fetch a filing's
-primary document (PDF/HTML) through the same SSRF-guarded fetcher and run it through the sandboxed
-:class:`FilingParser` when ``fetch.params.extract_filings: 'true'`` and Tika are configured. It
-returns ``None`` when opt-out/Tika-absent/extraction failure should fall back to the metadata-only
-body. The default worker parse path remains metadata-only until a caller wires this second fetch.
+**Full-filing extraction (B22 completion, opt-in).** :meth:`fetch_entry_content` fetches each primary
+document (PDF/HTML) through the same SSRF-pinned fetcher when
+``fetch.params.extract_filings: 'true'`` and Tika are configured. The fetch worker preserves those
+bytes as a distinct immutable raw object; scalable parse workers run :class:`FilingParser` locally.
+Any unavailable/failing secondary fetch falls back to the metadata-only submissions entry.
 
 SEC requires a descriptive **User-Agent with a contact** (sent as ``DEFAULT_USER_AGENT``) and a
 **10 req/s** limit (the source's ``rate_limit``, enforced by the single fetch worker). No API key.
@@ -24,7 +24,7 @@ from typing import Any
 
 from atlascore.connectors_sdk.base import Connector, FetchContext
 from atlascore.connectors_sdk.fetcher import SafeFetcher
-from atlascore.connectors_sdk.types import FeedEntry, FetchOutcome
+from atlascore.connectors_sdk.types import FeedEntry, FetchedEntryContent, FetchOutcome
 from atlascore.core.errors import ConfigError, FetchError, SecurityError, SsrfError
 from atlascore.core.logging import get_logger
 from atlascore.parsers.filing import FilingParser
@@ -34,6 +34,7 @@ from atlascore.security.sandbox import tika_available
 _ARCHIVE_BASE = "https://www.sec.gov/Archives/edgar/data"
 # MIME types accepted when fetching a filing's primary document for Tika extraction (B22).
 _FILING_MIME = frozenset({"application/pdf", "text/html", "application/xhtml+xml", "text/plain"})
+_FILING_PARSER_REF = "atlascore.parsers.filing.parser:FilingParser"
 
 _log = get_logger("atlascore.connectors.sec")
 
@@ -43,6 +44,27 @@ class SecSubmissionsConnector(Connector):
 
     name = "sec_submissions"
     accepted_mime_types = frozenset({"application/json", "text/json"})
+
+    def fetch_entry_content(
+        self, fetcher: SafeFetcher, ctx: FetchContext, entry: FeedEntry
+    ) -> FetchedEntryContent | None:
+        """Fetch one primary filing for local Tika parsing, or fall back to metadata."""
+        if ctx.params.get("extract_filings") != "true" or not entry.link or not tika_available():
+            return None
+        try:
+            outcome = fetcher.fetch(
+                entry.link,
+                timeout=ctx.timeout,
+                max_requests=ctx.max_requests,
+                window_seconds=ctx.window_seconds,
+                accept_mime=_FILING_MIME,
+            )
+            if outcome.not_modified or not outcome.content:
+                return None
+            return FetchedEntryContent(outcome=outcome, parser_ref=_FILING_PARSER_REF)
+        except (FetchError, SsrfError, SecurityError, ConfigError) as exc:
+            _log.warning("sec_filing_fetch_failed", url=entry.link, error=str(exc))
+            return None
 
     def extract_filing(
         self,
@@ -58,20 +80,12 @@ class SecSubmissionsConnector(Connector):
         (``params.extract_filings != 'true'``), when Tika isn't available, or when the
         fetch/extraction fails (never propagates — a bad filing must not fail the whole crawl).
         """
-        if ctx.params.get("extract_filings") != "true" or not tika_available():
+        fetched = self.fetch_entry_content(fetcher, ctx, FeedEntry(guid=url, link=url))
+        if fetched is None:
             return None
         try:
-            outcome = fetcher.fetch(
-                url,
-                timeout=ctx.timeout,
-                max_requests=ctx.max_requests,
-                window_seconds=ctx.window_seconds,
-                accept_mime=_FILING_MIME,
-            )
-            if outcome.not_modified or not outcome.content:
-                return None
             parsed = (filing_parser or FilingParser()).parse(
-                outcome.content, content_type=outcome.mime_type
+                fetched.outcome.content, content_type=fetched.outcome.mime_type
             )
             return parsed.body_text or None
         except (FetchError, SsrfError, SecurityError, ConfigError) as exc:

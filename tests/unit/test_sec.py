@@ -28,6 +28,7 @@ def _fetcher() -> SafeFetcher:
         clock=FixedClock(NOW),
         resolver=lambda _host: ["93.184.216.34"],
         sleep=lambda _s: None,
+        pin_connections=False,
     )
 
 
