@@ -12,6 +12,8 @@ AtlasCore code is Apache-2.0; harvested data remains internal-only. New work acc
 
 ### Documentation
 
+- Added a restrained README topic-badge row backed by matching GitHub repository topics for data
+  ingestion, MCP, PostgreSQL/pgvector, provenance, self-hosting, research, and source domains.
 - Rebuilt the public front door around a complete operator journey: added an end-user getting-started
   guide covering configuration, first ingestion, continuous runtime, CLI/WebUI/API/MCP surfaces,
   optional backends, verification, production handoff, and troubleshooting; linked it prominently

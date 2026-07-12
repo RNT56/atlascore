@@ -366,6 +366,8 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## Done — v0.1 release/security completion (2026-07-12)
 
+- **Repository discovery metadata:** GitHub About now carries focused topics for the actual product
+  surface, while README mirrors the six primary concepts in a lower-emphasis, linked badge row.
 - **Public front door and day-one operator journey:** README now leads to a complete getting-started
   guide covering configuration, first ingestion, continuous processes, CLI/WebUI/API/MCP use,
   optional backends, verification, production handoff, and troubleshooting. The advertised commands
