@@ -80,7 +80,9 @@ resolved at runtime; it is never a secret value.
 
 ### 1.3 Tooling assumptions
 
-- `atlas` is the console-script CLI (the only ingestion-management surface).
+- `atlas` is the console-script CLI (the only ingestion-management surface). Interactive snippets
+  abbreviate it after `source .venv/bin/activate`; without activation, use `uv run atlas ...`.
+  The vetted services call `/opt/atlascore/.venv/bin/atlas` directly.
 - `make` targets exist per the spec: `make setup`, `make dev`, `make migrate`, `make seed`,
   `make format`, `make lint`, `make typecheck`, `make test`, `make smoke`.
 - `psql` is available on the host for break-glass DB inspection.
@@ -104,7 +106,7 @@ resolved at runtime; it is never a secret value.
 After filling `.env`, creating `RAW_STORE_DIR`, starting PostgreSQL, and applying migrations, run:
 
 ```bash
-atlas soak preflight --send-probes
+uv run atlas soak preflight --send-probes
 ```
 
 The command fails unless `APP_ENV=prod`, database credentials and the contact user-agent are no
@@ -153,35 +155,41 @@ part of the ingestion/control plane.
 ### 2.2 First deploy
 
 ```bash
-# 1. Provision the VM, install Docker + Docker Compose plugin, create the app user.
+# 1. Provision the VM, install Docker + Docker Compose plugin, create the app user,
+#    and grant that dedicated user access to the Docker daemon.
+sudo usermod -aG docker atlascore
 sudo mkdir -p /opt/atlascore /var/lib/atlascore/raw /var/backups/atlascore
 sudo chown -R atlascore:atlascore /opt/atlascore /var/lib/atlascore /var/backups/atlascore
 
-# 2. Check out the repo (private) into /opt/atlascore.
-#    (Use your normal git/deploy mechanism; not covered here.)
+# 2. Check out the public code repo into /opt/atlascore and pin a release.
+sudo -u atlascore git clone https://github.com/RNT56/atlascore.git /opt/atlascore
+cd /opt/atlascore
+sudo -u atlascore git checkout v0.1.0
 
-# 3. Create the runtime environment file from the example and fill in secrets.
-cp /opt/atlascore/.env.example /opt/atlascore/.env
-chmod 600 /opt/atlascore/.env
-$EDITOR /opt/atlascore/.env        # set DATABASE_URL, RAW_STORE_DIR, backends, UA, etc.
+# 3. Install the locked environment. This also creates .env from .env.example.
+sudo -u atlascore make setup
+sudo -u atlascore chmod 600 /opt/atlascore/.env
+sudo -u atlascore vi /opt/atlascore/.env  # set matching DB credentials, absolute RAW_STORE_DIR,
+                                         # real UA/contact, delivery, heartbeat, and backups
 
 #    If using a committed SOPS/age secrets file instead (see runbook 10), decrypt at deploy:
 #    export SOPS_AGE_KEY_FILE=/secure/keys/atlascore-age.key   # OUTSIDE the repo
 #    infra/decrypt-secrets.sh                                  # -> .env (chmod 600)
 
-# 4. Bring up Postgres (+ optional Meilisearch).
-cd /opt/atlascore && docker compose -f infra/docker-compose.yml up -d db
-# wait for healthy
-docker compose -f infra/docker-compose.yml ps
+# 4. Bring up Postgres (+ optional Meilisearch). `make dev` uses the root .env and correct project dir.
+sudo -u atlascore make dev
+# wait for the postgres service to be healthy
+sudo -u atlascore docker compose --project-directory . --env-file .env \
+  -f infra/docker-compose.yml ps postgres
 
 # 5. Apply migrations (creates extensions pgvector + pg_trgm, then the 12 tables).
-make migrate
+sudo -u atlascore make migrate
 
 # 6. Seed fixtures / demo sources if desired.
-make seed
+sudo -u atlascore make seed
 
 # 7. Validate a smoke run.
-make smoke
+sudo -u atlascore make smoke
 ```
 
 > The early migration runs `CREATE EXTENSION IF NOT EXISTS vector;` and
@@ -1338,4 +1346,4 @@ relevant changes in `CHANGELOG.md [Unreleased]`, note in-progress operational wo
 `docs/STATUS.md`, and add an ADR under `docs/decisions/` for any architecture-changing
 operational decision (e.g. enabling the multi-fetch-worker `host_rate_state` scale-up).
 
-*Document date: 2026-06-03.*
+*Document reviewed: 2026-07-12.*

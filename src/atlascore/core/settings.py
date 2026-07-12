@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )
 
     # Local-disk raw store: immutable, gzipped, content-addressed payloads.
-    raw_store_dir: Path = Path("/var/atlascore/rawstore")
+    raw_store_dir: Path = Path("./var/rawstore")
 
     # Optional single-binary search engine; blank => Postgres FTS only (default).
     meili_url: str | None = None

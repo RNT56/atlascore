@@ -362,10 +362,15 @@ until the current set runs unattended for a month before adding sources or servi
 
 ## In progress
 
-- _(nothing in progress — v0.1 release/security completion shipped; the soak is an operator run.)_
+- _(nothing in progress — v0.1 is shipped; the soak is an operator run.)_
 
 ## Done — v0.1 release/security completion (2026-07-12)
 
+- **Public front door and day-one operator journey:** README now leads to a complete getting-started
+  guide covering configuration, first ingestion, continuous processes, CLI/WebUI/API/MCP use,
+  optional backends, verification, production handoff, and troubleshooting. The advertised commands
+  use the managed environment, the local raw-store default is writable, the VM deploy path is
+  executable, and public/operational local links are regression-tested.
 - **Public release posture:** Apache-2.0 code license, version `0.1.0`, real repository metadata,
   and public-facing docs reconciled to the code-not-data boundary (ADR 0040).
 - **Supply chain:** full `uv lock --upgrade`, explicit security floors, audit-clean lock, checkout v7,
@@ -652,8 +657,9 @@ soak; summary pre-warm, SEC per-filing wiring, and a weekly restore-drill timer 
   provenance, and enqueues network-free FilingParser work. Search/enrichment receive the full text;
   absent Tika or any secondary error falls back to metadata.
 - **Local-only security-tooling quirks (do not reproduce in CI; NOT B5 regressions).**
-  - `pip-audit --disable-pip` audits the fully pinned exported lock without creating a temporary
-    virtualenv, avoiding the local `ensurepip` SIGABRT while preserving strict vulnerability failure.
+  - `make audit` exports the fully pinned third-party lock and runs `pip-audit --strict --disable-pip`
+    without creating a temporary virtualenv, avoiding the local `ensurepip` SIGABRT while preserving
+    strict vulnerability failure.
   - A *newer local* `detect-secrets` flags the `hashed_secret` hex strings inside `.secrets.baseline`
     itself; CI's pinned version does not — the CI `secrets-scan` job passes green, and no B5 source
     file appears in any finding. The committed `.secrets.baseline` is unchanged from HEAD.

@@ -10,6 +10,14 @@ AtlasCore code is Apache-2.0; harvested data remains internal-only. New work acc
 
 ## [Unreleased]
 
+### Documentation
+
+- Rebuilt the public front door around a complete operator journey: added an end-user getting-started
+  guide covering configuration, first ingestion, continuous runtime, CLI/WebUI/API/MCP surfaces,
+  optional backends, verification, production handoff, and troubleshooting; linked it prominently
+  from README; corrected virtual-environment command usage, release/security/CI posture, deployment
+  wording, SOPS materialization, and the writable local raw-store default.
+
 ## [0.1.0] - 2026-07-12
 
 This entry covers the planning + documentation scaffold, the **B1 skeleton** (the `atlascore`

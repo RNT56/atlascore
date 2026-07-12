@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import SecretStr
 
@@ -17,6 +19,7 @@ _ATLAS_ENV_VARS = (
     "EMBEDDING_DIM",
     "LLM_BACKEND",
     "LLM_API_KEY",
+    "RAW_STORE_DIR",
 )
 
 
@@ -33,6 +36,7 @@ def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.embedding_dim == 384
     assert s.llm_backend == "none"
     assert s.database_url.startswith("postgresql+psycopg://")
+    assert s.raw_store_dir == Path("var/rawstore")
     # B21 defaults
     assert s.ner_backend == "rules"
     assert s.llm_provider == "openai"

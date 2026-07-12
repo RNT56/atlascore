@@ -30,7 +30,8 @@ Never implement paywall/CAPTCHA bypass, proxy/IP rotation to evade limits, crede
 
 ## 2. Dev setup (uv)
 
-Prerequisites: **Python 3.12+**, [`uv`](https://github.com/astral-sh/uv), Docker + Docker Compose.
+Prerequisites: **Python 3.12 or 3.13**,
+[`uv`](https://docs.astral.sh/uv/getting-started/installation/), Docker + Docker Compose.
 
 ```bash
 # 1. Install deps (with the dev extra) + create .env + install pre-commit hooks
@@ -82,9 +83,9 @@ make precommit   # run every pre-commit hook on the whole tree
 ```
 
 CI additionally runs: an Alembic migration check (autogenerate diff / `upgrade --sql`
-dry run), source-YAML schema validation, and a secrets scan (detect-secrets). Python
-3.12 matrix; an optional integration job uses a Postgres 16 + pgvector service
-container.
+dry run), source-YAML schema validation, a secrets scan, package build, dependency audit,
+and security regressions. Python 3.12 and 3.13 are covered; PostgreSQL 16 + pgvector
+integration is mandatory on every pull request and push.
 
 **Definition of Done** (from `CLAUDE.md`): focused diffs; tests cover changed
 behavior; gates pass or skips are explained; migrations exist for schema changes;
