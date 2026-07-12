@@ -14,6 +14,13 @@ agents can safely use.
 ![license](https://img.shields.io/badge/license-Apache--2.0-0f766e?style=for-the-badge)
 [![release](https://img.shields.io/github/v/release/RNT56/atlascore?style=for-the-badge&label=release)](https://github.com/RNT56/atlascore/releases/latest)
 
+[![data ingestion](https://img.shields.io/badge/topic-data_ingestion-334155?style=flat-square)](https://github.com/topics/data-ingestion)
+[![MCP](https://img.shields.io/badge/topic-MCP-0f766e?style=flat-square)](https://github.com/topics/model-context-protocol)
+[![PostgreSQL](https://img.shields.io/badge/topic-PostgreSQL-336791?style=flat-square)](https://github.com/topics/postgresql)
+[![pgvector](https://img.shields.io/badge/topic-pgvector-6d28d9?style=flat-square)](https://github.com/topics/pgvector)
+[![provenance](https://img.shields.io/badge/topic-provenance-9a3412?style=flat-square)](https://github.com/topics/provenance)
+[![self-hosted](https://img.shields.io/badge/topic-self--hosted-475569?style=flat-square)](https://github.com/topics/self-hosted)
+
 </div>
 
 ---
