@@ -102,7 +102,7 @@ local-embeddings = [
 cloud = [
     "openai>=1.30",
     "google-genai>=0.3",
-    "cryptography>=48.0.1", # transitive security floor for cloud auth stacks
+    "cryptography>=50.0.0", # transitive security floor for cloud auth stacks
 ]
 
 # Hosted LLM summary backends (LLM_BACKEND=api). Same cloud-egress caveat as above;
